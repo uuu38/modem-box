@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>光猫全能工具箱 (Tauri 2.0)</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="/main.js" defer></script>
+  </head>
+
+  <body>
+    <div class="app-layout">
+      <!-- Header -->
+      <header class="app-header">
+        <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.1.0</h2>
+        <span class="badge">Tauri 2.0 + Rust 核心驱动</span>
+      </header>
+
+      <!-- Connection Bar -->
+      <section class="card config-card">
+        <div class="form-row">
+          <label>光猫 IP: <input type="text" id="ip" value="192.168.1.1" /></label>
+          <label>Telnet 账号: <input type="text" id="user" value="CMCCAdmin" /></label>
+          <label>Telnet 密码: <input type="text" id="pass" value="aDm8H%MdA" /></label>
+        </div>
+      </section>
+
+      <!-- Action Buttons Grid -->
+      <section class="card action-card">
+        <h3>⚡ 核心功能操作区</h3>
+        <div class="button-grid">
+          <button id="btn-enable-telnet" class="btn btn-primary">1. 网页开启 Telnet (/entelnet.cgi)</button>
+          <button id="btn-test-telnet" class="btn btn-success">2. 测试 Telnet 握手与连接</button>
+          <button id="btn-sys-info" class="btn btn-info">3. 读取系统硬件与链路状态</button>
+          <button id="btn-credentials" class="btn btn-warning">4. 提取核心凭据 (LOID/宽带/超管)</button>
+          <button id="btn-surveillance" class="btn btn-secondary">5. 运营商监控专项审计</button>
+          <button id="btn-kill-surv" class="btn btn-danger">6. 一键停止 Java/DPI 监控释放内存</button>
+        </div>
+      </section>
+
+      <!-- Custom Command -->
+      <section class="card cmd-card">
+        <div class="cmd-row">
+          <input type="text" id="custom-cmd" placeholder="输入自定义 Shell 命令，例如: free -m 或 ifconfig" />
+          <button id="btn-exec-cmd" class="btn btn-dark">执行指令</button>
+        </div>
+      </section>
+
+      <!-- Output Display -->
+      <section class="card output-card">
+        <div class="output-header">
+          <h3>📋 执行结果与数据输出</h3>
+          <button id="btn-clear" class="btn btn-sm">清空</button>
+        </div>
+        <pre id="output-box">// 等待执行操作...</pre>
+      </section>
+    </div>
+  </body>
+</html>
