@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use regex::Regex;
+use tokio::time::{sleep, Duration};
 use crate::telnet_client::TelnetClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,6 +283,46 @@ impl ModemManager {
         } else {
             Err("尝试停止后仍有 Java 进程残留，请重试".to_string())
         }
+    }
+
+    /// Restore startup script permissions and relaunch Java OSGi container
+    pub async fn restore_surveillance(client: &mut TelnetClient) -> Result<String, String> {
+        // 1. Ensure /tmp/.null exists and unlock startup script permissions
+        client
+            .exec("touch /tmp/.null; chmod 777 /usr/cmcc_app/conf/start_java.sh 2>/tmp/.null")
+            .await?;
+
+        // 2. Avoid duplicate launch if already running
+        let current = Self::check_surveillance(client).await?;
+        if current.java_running {
+            return Ok(format!(
+                "已恢复自启脚本权限，Java 容器当前正在运行 (PID: {})",
+                current.java_pid.unwrap_or_else(|| "?".to_string())
+            ));
+        }
+
+        // 3. Relaunch Java OSGi startup script detached from telnet PTY
+        let launch_check = client
+            .exec("if [ -f /usr/bin/start_java.sh ]; then sh /usr/bin/start_java.sh </tmp/.null >/tmp/.null 2>&1 & echo OK; elif [ -f /usr/cmcc_app/conf/start_java.sh ]; then sh /usr/cmcc_app/conf/start_java.sh </tmp/.null >/tmp/.null 2>&1 & echo OK; else echo MISSING; fi")
+            .await?;
+
+        if launch_check.contains("MISSING") {
+            return Err("未在光猫上找到 start_java.sh 启动脚本".to_string());
+        }
+
+        // 4. Wait briefly and poll for JVM process startup
+        for _ in 0..3 {
+            sleep(Duration::from_millis(1200)).await;
+            let status = Self::check_surveillance(client).await?;
+            if status.java_running {
+                return Ok(format!(
+                    "已恢复自启权限并重新启动 Java/DPI 容器！(PID: {})",
+                    status.java_pid.unwrap_or_else(|| "?".to_string())
+                ));
+            }
+        }
+
+        Ok("已恢复 /usr/cmcc_app/conf/start_java.sh 自启权限并触发后台启动（JVM 初始化约需数秒，请稍后刷新查看）".to_string())
     }
 }
 

@@ -4,6 +4,7 @@ import {
   Gauge,
   Loader2,
   RefreshCw,
+  RotateCcw,
   ShieldOff,
   TerminalSquare,
   Wifi,
@@ -19,6 +20,7 @@ interface DashboardPageProps {
   loadingSysInfo: boolean;
   onRefreshSysInfo: () => void;
   onKillSurveillance: () => Promise<void>;
+  onRestoreSurveillance: () => Promise<void>;
   onLog: (level: LogLevel, msg: string) => void;
   onToast: (type: "success" | "error" | "info", msg: string) => void;
   onJumpSettings: () => void;
@@ -30,12 +32,13 @@ export function DashboardPage({
   loadingSysInfo,
   onRefreshSysInfo,
   onKillSurveillance,
+  onRestoreSurveillance,
   onLog,
   onToast,
   onJumpSettings,
 }: DashboardPageProps) {
   const [testingHandshake, setTestingHandshake] = useState(false);
-  const [killing, setKilling] = useState(false);
+  const [survBusy, setSurvBusy] = useState<"kill" | "restore" | null>(null);
 
   const handleTestHandshake = async () => {
     setTestingHandshake(true);
@@ -57,12 +60,12 @@ export function DashboardPage({
     }
   };
 
-  const handleKillClick = async () => {
-    setKilling(true);
+  const runSurvAction = async (mode: "kill" | "restore") => {
+    setSurvBusy(mode);
     try {
-      await onKillSurveillance();
+      await (mode === "kill" ? onKillSurveillance() : onRestoreSurveillance());
     } finally {
-      setKilling(false);
+      setSurvBusy(null);
     }
   };
 
@@ -171,19 +174,35 @@ export function DashboardPage({
             </div>
           </div>
 
-          <Button
-            variant="danger"
-            size="sm"
-            disabled={killing || config.state !== "online"}
-            onClick={handleKillClick}
-          >
-            {killing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <ShieldOff className="h-3.5 w-3.5" />
-            )}
-            一键释放 Java 监控内存
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={survBusy !== null || config.state !== "online"}
+              onClick={() => void runSurvAction("restore")}
+            >
+              {survBusy === "restore" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+              恢复监控
+            </Button>
+
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={survBusy !== null || config.state !== "online"}
+              onClick={() => void runSurvAction("kill")}
+            >
+              {survBusy === "kill" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShieldOff className="h-3.5 w-3.5" />
+              )}
+              一键释放 Java 监控内存
+            </Button>
+          </div>
         </div>
 
         {/* 3 枚环形表盘 */}

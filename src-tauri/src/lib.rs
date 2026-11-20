@@ -17,6 +17,7 @@ pub fn run() {
             get_credentials,
             check_surveillance,
             kill_surveillance,
+            restore_surveillance,
             exec_shell_cmd,
         ])
         .run(tauri::generate_context!())

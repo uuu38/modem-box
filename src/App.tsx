@@ -134,33 +134,51 @@ export function App() {
     void runAutoDetect("192.168.1.1");
   }, [runAutoDetect]);
 
-  const handleKillSurveillance = useCallback(async () => {
-    addLog("info", "正在停止 Java DPI / 监控进程并锁定自启...");
-    try {
-      const msg = await invoke<string>("kill_surveillance", {
-        ip: config.ip,
-        user: config.user,
-        pass: config.pass,
-      });
-      addLog("success", msg);
-      addToast("success", "已停止监控并释放内存");
+  const runSurveillanceAction = useCallback(
+    async (action: "kill" | "restore") => {
+      const meta =
+        action === "kill"
+          ? {
+              cmd: "kill_surveillance",
+              startLog: "正在停止 Java DPI / 监控进程并锁定自启...",
+              okToast: "已停止监控并释放内存",
+              errLabel: "停止监控失败",
+            }
+          : {
+              cmd: "restore_surveillance",
+              startLog: "正在恢复 Java 监控脚本权限并重启容器...",
+              okToast: "已恢复 Java 监控服务",
+              errLabel: "恢复监控失败",
+            };
 
-      const updatedStatus = await invoke<SurveillanceStatus>(
-        "check_surveillance",
-        {
+      addLog("info", meta.startLog);
+      try {
+        const msg = await invoke<string>(meta.cmd, {
           ip: config.ip,
           user: config.user,
           pass: config.pass,
-        }
-      );
-      setSurveillance(updatedStatus);
-      await fetchSystemInfoWith(config.ip, config.user, config.pass, true);
-    } catch (err) {
-      const e = typeof err === "string" ? err : String(err);
-      addLog("error", `停止监控失败: ${e}`);
-      addToast("error", "停止监控失败");
-    }
-  }, [addLog, addToast, config.ip, config.pass, config.user, fetchSystemInfoWith]);
+        });
+        addLog("success", msg);
+        addToast("success", meta.okToast);
+
+        const updatedStatus = await invoke<SurveillanceStatus>(
+          "check_surveillance",
+          {
+            ip: config.ip,
+            user: config.user,
+            pass: config.pass,
+          }
+        );
+        setSurveillance(updatedStatus);
+        await fetchSystemInfoWith(config.ip, config.user, config.pass, true);
+      } catch (err) {
+        const e = typeof err === "string" ? err : String(err);
+        addLog("error", `${meta.errLabel}: ${e}`);
+        addToast("error", meta.errLabel);
+      }
+    },
+    [addLog, addToast, config.ip, config.pass, config.user, fetchSystemInfoWith]
+  );
 
   const handleModeChange = (mode: "auto" | "manual") => {
     setConfig((prev) => ({ ...prev, mode }));
@@ -188,7 +206,8 @@ export function App() {
             onRefreshSysInfo={() =>
               void fetchSystemInfoWith(config.ip, config.user, config.pass)
             }
-            onKillSurveillance={handleKillSurveillance}
+            onKillSurveillance={() => runSurveillanceAction("kill")}
+            onRestoreSurveillance={() => runSurveillanceAction("restore")}
             onLog={addLog}
             onToast={addToast}
             onJumpSettings={() => setActiveTab("settings")}
@@ -210,7 +229,8 @@ export function App() {
             config={config}
             status={surveillance}
             onStatusChange={setSurveillance}
-            onKillSurveillance={handleKillSurveillance}
+            onKillSurveillance={() => runSurveillanceAction("kill")}
+            onRestoreSurveillance={() => runSurveillanceAction("restore")}
             onLog={addLog}
             onToast={addToast}
           />

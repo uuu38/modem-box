@@ -52,6 +52,12 @@ pub async fn kill_surveillance(ip: String, user: String, pass: String) -> Result
 }
 
 #[command]
+pub async fn restore_surveillance(ip: String, user: String, pass: String) -> Result<String, String> {
+    let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
+    ModemManager::restore_surveillance(&mut client).await
+}
+
+#[command]
 pub async fn exec_shell_cmd(ip: String, user: String, pass: String, cmd: String) -> Result<String, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
     client.exec(&cmd).await

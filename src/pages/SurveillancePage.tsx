@@ -5,6 +5,7 @@ import {
   Loader2,
   Network,
   Radio,
+  RotateCcw,
   Search,
   ShieldCheck,
   ShieldOff,
@@ -21,6 +22,7 @@ interface SurveillancePageProps {
   status: SurveillanceStatus | null;
   onStatusChange: (s: SurveillanceStatus) => void;
   onKillSurveillance: () => Promise<void>;
+  onRestoreSurveillance: () => Promise<void>;
   onLog: (level: LogLevel, msg: string) => void;
   onToast: (type: "success" | "error" | "info", msg: string) => void;
 }
@@ -30,18 +32,20 @@ export function SurveillancePage({
   status,
   onStatusChange,
   onKillSurveillance,
+  onRestoreSurveillance,
   onLog,
   onToast,
 }: SurveillancePageProps) {
-  const [scanning, setScanning] = useState(false);
-  const [killing, setKilling] = useState(false);
+  const [busyAction, setBusyAction] = useState<
+    "scan" | "kill" | "restore" | null
+  >(null);
 
   const handleScan = async () => {
     if (config.state !== "online") {
       onToast("error", "请先连通 Telnet 端口");
       return;
     }
-    setScanning(true);
+    setBusyAction("scan");
     onLog("info", "正在扫描光猫监控与流控进程...");
     try {
       const s = await invoke<SurveillanceStatus>("check_surveillance", {
@@ -57,20 +61,20 @@ export function SurveillancePage({
       onLog("error", `扫描失败: ${e}`);
       onToast("error", "扫描监控失败");
     } finally {
-      setScanning(false);
+      setBusyAction(null);
     }
   };
 
-  const handleKill = async () => {
+  const handleAction = async (mode: "kill" | "restore") => {
     if (config.state !== "online") {
       onToast("error", "请先连通 Telnet 端口");
       return;
     }
-    setKilling(true);
+    setBusyAction(mode);
     try {
-      await onKillSurveillance();
+      await (mode === "kill" ? onKillSurveillance() : onRestoreSurveillance());
     } finally {
-      setKilling(false);
+      setBusyAction(null);
     }
   };
 
@@ -96,10 +100,10 @@ export function SurveillancePage({
         <div className="flex items-center gap-2.5">
           <Button
             variant="secondary"
-            disabled={scanning || killing}
+            disabled={busyAction !== null}
             onClick={handleScan}
           >
-            {scanning ? (
+            {busyAction === "scan" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Search className="h-4 w-4" />
@@ -108,11 +112,24 @@ export function SurveillancePage({
           </Button>
 
           <Button
-            variant="danger"
-            disabled={killing || scanning}
-            onClick={handleKill}
+            variant="success"
+            disabled={busyAction !== null}
+            onClick={() => void handleAction("restore")}
           >
-            {killing ? (
+            {busyAction === "restore" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+            恢复 Java 监控
+          </Button>
+
+          <Button
+            variant="danger"
+            disabled={busyAction !== null}
+            onClick={() => void handleAction("kill")}
+          >
+            {busyAction === "kill" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <ShieldOff className="h-4 w-4" />
