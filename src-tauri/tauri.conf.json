@@ -10,9 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "modem-box",
-        "width": 800,
-        "height": 600
+        "title": "ModemBox - 天邑/烽火光猫全能工具箱",
+        "width": 980,
+        "height": 680,
+        "minWidth": 820,
+        "minHeight": 560
       }
     ],
     "security": {

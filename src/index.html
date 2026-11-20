@@ -3,115 +3,418 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>光猫全能工具箱 (Tauri 2.0)</title>
+    <title>ModemBox - 光猫全能工具箱</title>
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="/main.js" defer></script>
   </head>
 
   <body>
-    <div class="app-layout">
-      <!-- Header -->
-      <header class="app-header">
-        <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.3.0</h2>
-        <span class="badge" id="telnet-status-badge">Telnet 状态: 正在自动探测...</span>
+    <div class="app-shell">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="brand-icon">🛠️</div>
+          <span class="brand-title">ModemBox 光猫全能工具箱</span>
+          <span class="version-tag">v0.3.0</span>
+        </div>
+
+        <div class="topbar-right">
+          <div class="status-pill checking" id="top-status-pill">
+            <span class="status-dot"></span>
+            <span id="top-status-text">正在探测 192.168.1.1...</span>
+          </div>
+
+          <div class="mode-switch-pill" title="切换连接模式">
+            <button class="mode-switch-btn active" id="top-mode-auto" data-mode="auto">⚡ 自动模式</button>
+            <button class="mode-switch-btn" id="top-mode-manual" data-mode="manual">🛠️ 手动模式</button>
+          </div>
+
+          <button class="btn btn-ghost btn-sm" id="btn-top-refresh">🔄 重连</button>
+        </div>
       </header>
 
-      <!-- Connection & Mode Section -->
-      <section class="card config-card">
-        <!-- Tabs Header -->
-        <div class="tabs-header">
-          <button class="tab-btn active" id="tab-btn-auto" data-tab="auto">⚡ 自动模式 (开机自启)</button>
-          <button class="tab-btn" id="tab-btn-manual" data-tab="manual">🛠️ 手动模式 (自定义 IP 与凭据)</button>
-        </div>
+      <!-- Main Body -->
+      <div class="app-body">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+          <button class="nav-item active" data-view="dashboard">
+            <span class="nav-icon">📊</span>
+            <span>概览仪表盘</span>
+          </button>
+          <button class="nav-item" data-view="credentials">
+            <span class="nav-icon">🔑</span>
+            <span>核心凭据库</span>
+          </button>
+          <button class="nav-item" data-view="surveillance">
+            <span class="nav-icon">🛡️</span>
+            <span>监控与清理</span>
+          </button>
+          <button class="nav-item" data-view="terminal">
+            <span class="nav-icon">💻</span>
+            <span>快捷终端</span>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span>连接设置</span>
+          </button>
 
-        <!-- Tab 1: Auto Mode Content -->
-        <div class="tab-content active" id="tab-content-auto">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <p style="font-size: 13px; color: #94a3b8;">
-              已启动全自动模式：自动探测 192.168.1.1，免密读取当前 Telnet 账号密码并保证 23 端口畅通。
-            </p>
-            <button id="btn-auto-refresh" class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;">
-              🔄 重新自动检测与开启
-            </button>
+          <div class="sidebar-footer">
+            <div>适用：天邑 / 烽火移动定制光猫</div>
+            <div>引擎：Tauri 2.0 + Rust</div>
           </div>
+        </aside>
 
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="label">目标网关 IP</span>
-              <span class="value" id="disp-ip">192.168.1.1</span>
+        <!-- Main Content Area -->
+        <main class="main-content">
+          <!-- View 1: Dashboard -->
+          <section class="view-panel active" id="view-dashboard">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">设备概览仪表盘</h2>
+                <p class="panel-subtitle">实时查看光猫运行状态、Telnet 通道与内存资源</p>
+              </div>
+              <div class="header-actions">
+                <button class="btn btn-primary" id="btn-refresh-dashboard">🔄 刷新设备状态</button>
+              </div>
             </div>
-            <div class="info-item">
-              <span class="label">读取到的 Telnet 账号</span>
-              <span class="value" id="disp-user">CMCCAdmin</span>
+
+            <div class="banner-strip">
+              <div class="banner-meta">
+                <div class="meta-item">
+                  <span class="meta-label">目标网关</span>
+                  <span class="meta-value" id="dash-ip">192.168.1.1</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">光路状态 (PON)</span>
+                  <span class="meta-value" id="dash-pon">待读取</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">上网模式</span>
+                  <span class="meta-value" id="dash-wan-mode">待读取</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">连续运行</span>
+                  <span class="meta-value" id="dash-uptime">待读取</span>
+                </div>
+              </div>
+              <button class="btn btn-success btn-sm" id="btn-dash-test-telnet">⚡ 测试 Telnet 握手</button>
             </div>
-            <div class="info-item">
-              <span class="label">读取到的 Telnet 密码</span>
-              <span class="value" id="disp-pass">aDm8H%MdA</span>
+
+            <div class="grid-2">
+              <!-- Card: Telnet Status -->
+              <div class="card">
+                <div class="card-title">
+                  <span>⚡ Telnet 通道与凭据</span>
+                  <span class="badge-state badge-neutral" id="dash-port-badge">端口 23 检测中</span>
+                </div>
+                <div class="kv-list">
+                  <div class="kv-row">
+                    <span class="kv-label">Telnet 账号</span>
+                    <div class="kv-right">
+                      <span class="kv-val" id="dash-telnet-user">CMCCAdmin</span>
+                      <button class="icon-btn copy-btn" data-copy-target="dash-telnet-user">📋 复制</button>
+                    </div>
+                  </div>
+                  <div class="kv-row">
+                    <span class="kv-label">Telnet 密码</span>
+                    <div class="kv-right">
+                      <span class="kv-val secret-val" id="dash-telnet-pass" data-secret="aDm8H%MdA" data-hidden="true">•••••••••</span>
+                      <button class="icon-btn eye-btn" data-eye-target="dash-telnet-pass">👁 显示</button>
+                      <button class="icon-btn copy-btn" data-copy-target="dash-telnet-pass">📋 复制</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card: RAM & Temp -->
+              <div class="card">
+                <div class="card-title">
+                  <span>💾 内存与温度监控</span>
+                  <span class="badge-state badge-neutral" id="dash-temp">温度: --</span>
+                </div>
+                <div class="progress-wrap">
+                  <div class="progress-header">
+                    <span id="dash-ram-text">内存使用: -- / -- MB</span>
+                    <span id="dash-ram-pct" style="font-weight: 700;">--%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill" id="dash-ram-bar"></div>
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                  <button class="btn btn-danger btn-sm" id="btn-dash-kill-surv">🧹 一键释放 Java 监控内存</button>
+                </div>
+              </div>
             </div>
-            <div class="info-item">
-              <span class="label">23 端口物理状态</span>
-              <span class="value" id="disp-port" style="color: #fbbf24;">检测中...</span>
+
+            <!-- Card: Hardware Info -->
+            <div class="card">
+              <div class="card-title">🖥️ 硬件与内核参数</div>
+              <div class="grid-3">
+                <div class="kv-row">
+                  <span class="kv-label">CPU 处理器</span>
+                  <span class="kv-val" id="dash-cpu">--</span>
+                </div>
+                <div class="kv-row">
+                  <span class="kv-label">CPU 核心</span>
+                  <span class="kv-val" id="dash-cores">--</span>
+                </div>
+                <div class="kv-row">
+                  <span class="kv-label">Linux 内核</span>
+                  <span class="kv-val" id="dash-kernel">--</span>
+                </div>
+              </div>
             </div>
+          </section>
+
+          <!-- View 2: Credentials -->
+          <section class="view-panel" id="view-credentials">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">核心凭据库</h2>
+                <p class="panel-subtitle">从光猫底层配置直接提取宽带拨号、超级管理员与光纤认证密码</p>
+              </div>
+              <button class="btn btn-warning" id="btn-fetch-creds">🔑 提取全部核心凭据</button>
+            </div>
+
+            <div class="card">
+              <div class="card-title">🌐 宽带拨号凭据 (PPPoE)</div>
+              <div class="grid-2">
+                <div class="kv-row">
+                  <span class="kv-label">宽带账号</span>
+                  <div class="kv-right">
+                    <span class="kv-val" id="cred-pppoe-user">未提取</span>
+                    <button class="icon-btn copy-btn" data-copy-target="cred-pppoe-user">📋 复制</button>
+                  </div>
+                </div>
+                <div class="kv-row">
+                  <span class="kv-label">宽带密码</span>
+                  <div class="kv-right">
+                    <span class="kv-val secret-val" id="cred-pppoe-pass" data-secret="" data-hidden="true">未提取</span>
+                    <button class="icon-btn eye-btn" data-eye-target="cred-pppoe-pass">👁 显示</button>
+                    <button class="icon-btn copy-btn" data-copy-target="cred-pppoe-pass">📋 复制</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <div class="card-title">👑 Web 后台管理账号</div>
+                <div class="kv-list">
+                  <div class="kv-row">
+                    <span class="kv-label">超管账号</span>
+                    <div class="kv-right">
+                      <span class="kv-val" id="cred-admin-user">未提取</span>
+                      <button class="icon-btn copy-btn" data-copy-target="cred-admin-user">📋 复制</button>
+                    </div>
+                  </div>
+                  <div class="kv-row">
+                    <span class="kv-label">超管密码</span>
+                    <div class="kv-right">
+                      <span class="kv-val secret-val" id="cred-admin-pass" data-secret="" data-hidden="true">未提取</span>
+                      <button class="icon-btn eye-btn" data-eye-target="cred-admin-pass">👁 显示</button>
+                      <button class="icon-btn copy-btn" data-copy-target="cred-admin-pass">📋 复制</button>
+                    </div>
+                  </div>
+                  <div class="kv-row">
+                    <span class="kv-label">普通用户密码</span>
+                    <div class="kv-right">
+                      <span class="kv-val secret-val" id="cred-user-pass" data-secret="" data-hidden="true">未提取</span>
+                      <button class="icon-btn eye-btn" data-eye-target="cred-user-pass">👁 显示</button>
+                      <button class="icon-btn copy-btn" data-copy-target="cred-user-pass">📋 复制</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">📡 光纤认证与设备标识</div>
+                <div class="kv-list">
+                  <div class="kv-row">
+                    <span class="kv-label">GPON 认证密码</span>
+                    <div class="kv-right">
+                      <span class="kv-val secret-val" id="cred-gpon-pass" data-secret="" data-hidden="true">未提取</span>
+                      <button class="icon-btn eye-btn" data-eye-target="cred-gpon-pass">👁 显示</button>
+                      <button class="icon-btn copy-btn" data-copy-target="cred-gpon-pass">📋 复制</button>
+                    </div>
+                  </div>
+                  <div class="kv-row">
+                    <span class="kv-label">设备基准 MAC</span>
+                    <div class="kv-right">
+                      <span class="kv-val" id="cred-mac">未提取</span>
+                      <button class="icon-btn copy-btn" data-copy-target="cred-mac">📋 复制</button>
+                    </div>
+                  </div>
+                  <div class="kv-row">
+                    <span class="kv-label">TR069 ACS 地址</span>
+                    <div class="kv-right">
+                      <span class="kv-val" id="cred-acs" title="">未提取</span>
+                      <button class="icon-btn copy-btn" data-copy-target="cred-acs">📋 复制</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- View 3: Surveillance Audit & Cleanup -->
+          <section class="view-panel" id="view-surveillance">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">运营商监控审计与清理</h2>
+                <p class="panel-subtitle">实时检测 DPI 深度包检测、Andlink 设备刺探与 TR069 远程控制状态</p>
+              </div>
+              <div class="header-actions">
+                <button class="btn btn-ghost" id="btn-scan-surv">🔍 重新扫描</button>
+                <button class="btn btn-danger" id="btn-kill-all-surv">🧹 一键停止全部监控</button>
+              </div>
+            </div>
+
+            <div class="banner-strip" id="surv-summary-banner">
+              <span id="surv-summary-text" style="font-size: 13px; font-weight: 600;">点击“重新扫描”查看当前光猫监控进程状态</span>
+            </div>
+
+            <div class="card">
+              <div class="surv-list">
+                <div class="surv-row">
+                  <div class="surv-info">
+                    <span class="surv-name">Java OSGi 容器 (cmccdpi / andlink)</span>
+                    <span class="surv-desc">负责流量镜像抓包、DNS 嗅探、家庭设备拓扑上传与 Wi-Fi 密码同步</span>
+                  </div>
+                  <span class="badge-state badge-neutral" id="surv-java-badge">未检测</span>
+                </div>
+
+                <div class="surv-row">
+                  <div class="surv-info">
+                    <span class="surv-name">TR-069 / CWMP 远程管理进程</span>
+                    <span class="surv-desc">运营商 RMS 平台远程下发配置、重启及改密通道</span>
+                  </div>
+                  <span class="badge-state badge-neutral" id="surv-tr069-badge">未检测</span>
+                </div>
+
+                <div class="surv-row">
+                  <div class="surv-info">
+                    <span class="surv-name">内核流量镜像驱动 (mirror_driver)</span>
+                    <span class="surv-desc">底层交换芯片硬件流量复制模块</span>
+                  </div>
+                  <span class="badge-state badge-neutral" id="surv-mirror-badge">未检测</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- View 4: Quick Terminal -->
+          <section class="view-panel" id="view-terminal">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">快捷终端</h2>
+                <p class="panel-subtitle">点击快捷指令胶囊或输入任意 Shell 命令在光猫执行</p>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-term-clear">清空屏幕</button>
+            </div>
+
+            <div class="card">
+              <div class="chip-row">
+                <button class="chip-btn" data-cmd="free -m">free -m (内存)</button>
+                <button class="chip-btn" data-cmd="ps | grep -E 'java|tr069|cwmp'">ps 监控进程</button>
+                <button class="chip-btn" data-cmd="cat /proc/mtd">cat /proc/mtd (分区)</button>
+                <button class="chip-btn" data-cmd="brctl show">brctl show (网桥)</button>
+                <button class="chip-btn" data-cmd="uname -a">uname -a (内核)</button>
+              </div>
+
+              <div class="cmd-input-row">
+                <input type="text" id="term-input" placeholder="输入 Shell 命令，按回车执行，例如: df -h" />
+                <button class="btn btn-primary" id="btn-term-exec">执行</button>
+              </div>
+
+              <pre class="terminal-screen" id="term-output">// 等待执行指令...</pre>
+            </div>
+          </section>
+
+          <!-- View 5: Connection Settings -->
+          <section class="view-panel" id="view-settings">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">连接设置与 Telnet 凭据管理</h2>
+                <p class="panel-subtitle">支持开机自动免密开启，也支持手动指定 IP 与自定义 Telnet 密码</p>
+              </div>
+            </div>
+
+            <!-- Auto Mode Card -->
+            <div class="card">
+              <div class="card-title">
+                <span>⚡ 自动模式（免密自检与保活）</span>
+                <button class="btn btn-primary btn-sm" id="btn-settings-auto">🔄 立即自动检测与开启</button>
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                启动软件时自动探测目标网关，通过免鉴权接口读取当前 Telnet 账号密码，并在 23 端口未开启时自动激活。
+              </p>
+              <div class="grid-3">
+                <div class="kv-row">
+                  <span class="kv-label">当前 IP</span>
+                  <span class="kv-val" id="set-auto-ip">192.168.1.1</span>
+                </div>
+                <div class="kv-row">
+                  <span class="kv-label">当前账号</span>
+                  <span class="kv-val" id="set-auto-user">CMCCAdmin</span>
+                </div>
+                <div class="kv-row">
+                  <span class="kv-label">当前密码</span>
+                  <span class="kv-val" id="set-auto-pass">aDm8H%MdA</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Manual Mode Card -->
+            <div class="card">
+              <div class="card-title">
+                <span>🛠️ 手动模式（自定义 IP 与可选更改凭据）</span>
+              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="manual-ip">光猫 IP 地址</label>
+                  <input type="text" id="manual-ip" value="192.168.1.1" />
+                </div>
+                <div class="field">
+                  <label for="manual-user">Telnet 账号 (选填)</label>
+                  <input type="text" id="manual-user" placeholder="留空则使用光猫当前账号" />
+                </div>
+                <div class="field">
+                  <label for="manual-pass">Telnet 新密码 (选填)</label>
+                  <input type="text" id="manual-pass" placeholder="留空保持原密码；修改需>8位" />
+                </div>
+              </div>
+
+              <div class="hint-text" id="pwd-hint">
+                💡 选填项：留空则保持光猫当前密码不变。若输入新密码，必须大于 8 位，且同时包含字母、数字和特殊字符，不含空格。
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+                <button class="btn btn-ghost" id="btn-reset-default">填入官方默认 (aDm8H%MdA)</button>
+                <button class="btn btn-warning" id="btn-manual-apply">🚀 应用配置并开启 Telnet</button>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <!-- Bottom Collapsible Log Drawer -->
+      <footer class="console-drawer" id="console-drawer">
+        <div class="console-bar" id="console-bar">
+          <div class="console-preview">
+            <span style="font-weight: 600; color: var(--text-main);">📋 运行日志</span>
+            <span class="console-latest" id="console-latest">// 正在初始化工具箱...</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="icon-btn" id="btn-log-clear">清空</button>
+            <span id="console-toggle-text" style="font-size: 11px; color: var(--text-muted);">展开 ▲</span>
           </div>
         </div>
-
-        <!-- Tab 2: Manual Mode Content -->
-        <div class="tab-content" id="tab-content-manual">
-          <div class="form-row">
-            <label style="flex: 1;">光猫 IP 地址: 
-              <input type="text" id="ip" value="192.168.1.1" />
-            </label>
-            <label style="flex: 1;">Telnet 账号 (选填): 
-              <input type="text" id="user" placeholder="留空则读取光猫当前账号" />
-            </label>
-            <label style="flex: 1.5;">Telnet 密码 (选填，支持重置): 
-              <input type="text" id="pass" placeholder="留空保持原密码；修改需>8位含字母数字特殊符" />
-            </label>
-          </div>
-
-          <div id="pwd-hint" style="font-size: 12px; margin-top: 6px; color: #94a3b8;">
-            💡 密码格式要求：选填。若填写修改，必须同时包含字母、数字和特殊字符，无空格，且大于 8 位。
-          </div>
-
-          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
-            <button id="btn-reset-default" class="btn btn-sm btn-secondary">
-              填入官方默认 (aDm8H%MdA)
-            </button>
-            <button id="btn-manual-apply" class="btn btn-warning" style="padding: 8px 16px;">
-              🚀 应用配置并开启 Telnet
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Advanced Toolbox -->
-      <section class="card action-card">
-        <h3>🧰 光猫高级功能操作区</h3>
-        <div class="button-grid">
-          <button id="btn-test-telnet" class="btn btn-success">1. 测试 Telnet 握手与连通性</button>
-          <button id="btn-credentials" class="btn btn-warning">2. 提取核心凭据 (宽带/超管/GPON密码)</button>
-          <button id="btn-sys-info" class="btn btn-info">3. 读取系统硬件、CPU 与内存信息</button>
-          <button id="btn-surveillance" class="btn btn-secondary">4. 运营商流控监控审计 (DPI/Andlink)</button>
-          <button id="btn-kill-surv" class="btn btn-danger">5. 一键停止 Java/DPI 监控释放内存</button>
-        </div>
-      </section>
-
-      <!-- Custom Command -->
-      <section class="card cmd-card">
-        <div class="cmd-row">
-          <input type="text" id="custom-cmd" placeholder="输入自定义 Shell 命令，例如: free -m 或 ps | grep java" />
-          <button id="btn-exec-cmd" class="btn btn-dark">执行指令</button>
-        </div>
-      </section>
-
-      <!-- Output Display -->
-      <section class="card output-card">
-        <div class="output-header">
-          <h3>📋 执行结果与数据输出</h3>
-          <button id="btn-clear" class="btn btn-sm">清空日志</button>
-        </div>
-        <pre id="output-box">// 正在启动自检...</pre>
-      </section>
+        <pre class="console-body" id="console-body"></pre>
+      </footer>
     </div>
+
+    <div class="toast-container" id="toast-container"></div>
   </body>
 </html>
