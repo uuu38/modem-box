@@ -15,6 +15,19 @@ pub struct EnableTelnetResult {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoDetectResult {
+    pub success: bool,
+    pub ip: String,
+    pub port_open: bool,
+    pub telnet_user: String,
+    pub telnet_pass: String,
+    pub telnet_enabled_in_cfg: bool,
+    pub was_already_running: bool,
+    pub steps: Vec<String>,
+    pub message: String,
+}
+
 pub struct WebClient {
     client: Client,
     ip: String,
@@ -75,7 +88,149 @@ impl WebClient {
         )
     }
 
-    /// Enable Telnet and optionally set custom username/password
+    /// Auto-detect and ensure Telnet is running on app startup
+    /// 1. Reads current Telnet user, pass, and enabled state via /getObjs
+    /// 2. If port 23 is already open, returns immediately
+    /// 3. If port 23 is closed, automatically triggers /setObjs with TelnetEnable: true
+    /// 4. Verifies port 23
+    pub async fn auto_detect_and_enable(&self) -> Result<AutoDetectResult, String> {
+        let mut steps = Vec::new();
+        steps.push(format!("🔍 [1/3] 正在探测光猫设备 (http://{})...", self.ip));
+
+        let get_url = format!("{}/getObjs?waitTimeoutMs=5000", self.base_url);
+        let get_body = r#"[{"fullPath":"InternetGatewayDevice.DeviceInfo.X_CMCC_ServiceManage."}]"#;
+
+        let mut telnet_user = "CMCCAdmin".to_string();
+        let mut telnet_pass = "aDm8H%MdA".to_string();
+        let mut cfg_enabled = false;
+
+        let query_res = self
+            .client
+            .post(&get_url)
+            .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .body(get_body)
+            .send()
+            .await
+            .map_err(|e| format!("无法连接光猫 (http://{}): {}。请确认电脑网线或 Wi-Fi 已连接光猫。", self.ip, e))?;
+
+        if let Ok(text) = query_res.text().await {
+            if let Ok(arr) = serde_json::from_str::<Value>(&text) {
+                if let Some(obj) = arr.as_array().and_then(|a| a.first()) {
+                    if let Some(u) = obj.get("TelnetUserName").and_then(|v| v.as_str()) {
+                        if !u.is_empty() {
+                            telnet_user = u.to_string();
+                        }
+                    }
+                    if let Some(p) = obj.get("TelnetPassword").and_then(|v| v.as_str()) {
+                        if !p.is_empty() {
+                            telnet_pass = p.to_string();
+                        }
+                    }
+                    if let Some(en) = obj.get("TelnetEnable").and_then(|v| v.as_str()) {
+                        cfg_enabled = en == "1" || en.eq_ignore_ascii_case("true");
+                    }
+                    steps.push(format!(
+                        "✅ [1/3] 自动读取到光猫凭据 -> 账号: [{}], 密码: [{}], 配置开关: {}",
+                        telnet_user, telnet_pass, if cfg_enabled { "已启用" } else { "未启用" }
+                    ));
+                }
+            }
+        }
+
+        if steps.len() == 1 {
+            steps.push(format!(
+                "ℹ️ [1/3] 未能解析到服务配置，采用默认凭据: [{}] / [{}]",
+                telnet_user, telnet_pass
+            ));
+        }
+
+        // Check if port 23 is already open
+        steps.push(format!("🔍 [2/3] 检测 {}:23 端口状态...", self.ip));
+        let already_open = self.check_telnet_port().await;
+
+        if already_open {
+            steps.push(format!("🎉 [3/3] 检测到 Telnet 服务已处于在线运行状态！无需重新开启。"));
+            let msg = format!("🎉 光猫已就绪！Telnet 23 端口已在线 (账号: {})", telnet_user);
+            return Ok(AutoDetectResult {
+                success: true,
+                ip: self.ip.clone(),
+                port_open: true,
+                telnet_user,
+                telnet_pass,
+                telnet_enabled_in_cfg: cfg_enabled,
+                was_already_running: true,
+                steps,
+                message: msg,
+            });
+        }
+
+        // Not open yet -> Trigger /setObjs to enable it
+        steps.push(format!("⚡ [2/3] 23 端口未开放，正在自动下发 Telnet 开启指令..."));
+        let set_url = format!("{}/setObjs", self.base_url);
+        let set_payload = serde_json::json!([{
+            "TelnetEnable": true,
+            "TelnetUserName": telnet_user,
+            "TelnetPassword": telnet_pass,
+            "fullPath": "InternetGatewayDevice.DeviceInfo.X_CMCC_ServiceManage."
+        }]);
+
+        let set_res = self
+            .client
+            .post(&set_url)
+            .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .body(set_payload.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("自动开启 Telnet 请求失败: {}", e))?;
+
+        let status = set_res.status();
+        steps.push(format!("✅ [2/3] 开启指令下发成功 (HTTP {})", status.as_u16()));
+
+        // Probe port 23
+        steps.push(format!("🔍 [3/3] 正在验证 {}:23 端口连通性...", self.ip));
+        let mut port_open = false;
+        for i in 1..=4 {
+            if self.check_telnet_port().await {
+                port_open = true;
+                break;
+            }
+            if i < 4 {
+                sleep(Duration::from_millis(600)).await;
+            }
+        }
+
+        if port_open {
+            steps.push(format!("🎉 [3/3] 连通成功！{}:23 端口已就绪！", self.ip));
+            Ok(AutoDetectResult {
+                success: true,
+                ip: self.ip.clone(),
+                port_open: true,
+                telnet_user,
+                telnet_pass,
+                telnet_enabled_in_cfg: true,
+                was_already_running: false,
+                steps,
+                message: "🎉 自动开启 Telnet 成功！光猫已连接就绪。".to_string(),
+            })
+        } else {
+            steps.push(format!("❌ [3/3] 指令已发送，但 23 端口仍未响应"));
+            Ok(AutoDetectResult {
+                success: false,
+                ip: self.ip.clone(),
+                port_open: false,
+                telnet_user,
+                telnet_pass,
+                telnet_enabled_in_cfg: cfg_enabled,
+                was_already_running: false,
+                steps,
+                message: "已向光猫发送开启指令，但 23 端口暂未响应，请检查光猫连接或手动开启".to_string(),
+            })
+        }
+    }
+
+    /// Enable Telnet and optionally set custom username/password (Manual Mode)
     pub async fn enable_telnet_direct(
         &self,
         custom_user: Option<&str>,
@@ -218,20 +373,11 @@ mod tests {
 
     #[test]
     fn test_invalid_passwords() {
-        // <= 8 chars
         assert!(validate_telnet_password("Aa1!").is_err());
-        assert!(validate_telnet_password("Aa1!5678").is_err()); // exactly 8 chars -> error
-
-        // contains space
+        assert!(validate_telnet_password("Aa1!5678").is_err());
         assert!(validate_telnet_password("Aa 1234567!").is_err());
-
-        // missing special
         assert!(validate_telnet_password("Aa123456789").is_err());
-
-        // missing digits
         assert!(validate_telnet_password("AaBbCcDdEe!").is_err());
-
-        // missing letters
         assert!(validate_telnet_password("1234567890!@#").is_err());
     }
 }

@@ -10,6 +10,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            auto_detect_telnet,
             enable_telnet,
             test_telnet,
             get_system_info,

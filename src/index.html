@@ -12,43 +12,81 @@
     <div class="app-layout">
       <!-- Header -->
       <header class="app-header">
-        <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.2.0</h2>
-        <span class="badge" id="telnet-status-badge">Telnet 状态: 未检测</span>
+        <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.3.0</h2>
+        <span class="badge" id="telnet-status-badge">Telnet 状态: 正在自动探测...</span>
       </header>
 
-      <!-- Step 1: Telnet Credentials & Enable -->
+      <!-- Connection & Mode Section -->
       <section class="card config-card">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <h3>⚡ Telnet 开启与账号密码配置</h3>
-          <div style="display: flex; gap: 8px;">
-            <button id="btn-reset-default" class="btn btn-sm btn-secondary" title="填入默认官方账号与密码">
-              恢复默认 (aDm8H%MdA)
+        <!-- Tabs Header -->
+        <div class="tabs-header">
+          <button class="tab-btn active" id="tab-btn-auto" data-tab="auto">⚡ 自动模式 (开机自启)</button>
+          <button class="tab-btn" id="tab-btn-manual" data-tab="manual">🛠️ 手动模式 (自定义 IP 与凭据)</button>
+        </div>
+
+        <!-- Tab 1: Auto Mode Content -->
+        <div class="tab-content active" id="tab-content-auto">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <p style="font-size: 13px; color: #94a3b8;">
+              已启动全自动模式：自动探测 192.168.1.1，免密读取当前 Telnet 账号密码并保证 23 端口畅通。
+            </p>
+            <button id="btn-auto-refresh" class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;">
+              🔄 重新自动检测与开启
             </button>
-            <button id="btn-enable-telnet" class="btn btn-primary" style="padding: 10px 18px; font-size: 14px;">
-              🚀 一键开启 / 设置 Telnet
-            </button>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="label">目标网关 IP</span>
+              <span class="value" id="disp-ip">192.168.1.1</span>
+            </div>
+            <div class="info-item">
+              <span class="label">读取到的 Telnet 账号</span>
+              <span class="value" id="disp-user">CMCCAdmin</span>
+            </div>
+            <div class="info-item">
+              <span class="label">读取到的 Telnet 密码</span>
+              <span class="value" id="disp-pass">aDm8H%MdA</span>
+            </div>
+            <div class="info-item">
+              <span class="label">23 端口物理状态</span>
+              <span class="value" id="disp-port" style="color: #fbbf24;">检测中...</span>
+            </div>
           </div>
         </div>
 
-        <div class="form-row" style="margin-top: 12px;">
-          <label style="flex: 1;">光猫 IP: 
-            <input type="text" id="ip" value="192.168.1.1" />
-          </label>
-          <label style="flex: 1;">Telnet 账号: 
-            <input type="text" id="user" value="CMCCAdmin" placeholder="例如: CMCCAdmin" />
-          </label>
-          <label style="flex: 1.5;">Telnet 密码 (支持自定义): 
-            <input type="text" id="pass" value="aDm8H%MdA" placeholder="必须大于8位，含字母、数字、特殊字符" />
-          </label>
-        </div>
-        <div id="pwd-hint" style="font-size: 12px; margin-top: 6px; color: #94a3b8;">
-          💡 密码要求：必须同时包含字母、数字和特殊字符，不含空格，长度必须大于 8 位（至少 9 位）。
+        <!-- Tab 2: Manual Mode Content -->
+        <div class="tab-content" id="tab-content-manual">
+          <div class="form-row">
+            <label style="flex: 1;">光猫 IP 地址: 
+              <input type="text" id="ip" value="192.168.1.1" />
+            </label>
+            <label style="flex: 1;">Telnet 账号 (选填): 
+              <input type="text" id="user" placeholder="留空则读取光猫当前账号" />
+            </label>
+            <label style="flex: 1.5;">Telnet 密码 (选填，支持重置): 
+              <input type="text" id="pass" placeholder="留空保持原密码；修改需>8位含字母数字特殊符" />
+            </label>
+          </div>
+
+          <div id="pwd-hint" style="font-size: 12px; margin-top: 6px; color: #94a3b8;">
+            💡 密码格式要求：选填。若填写修改，必须同时包含字母、数字和特殊字符，无空格，且大于 8 位。
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+            <button id="btn-reset-default" class="btn btn-sm btn-secondary">
+              填入官方默认 (aDm8H%MdA)
+            </button>
+            <button id="btn-manual-apply" class="btn btn-warning" style="padding: 8px 16px;">
+              🚀 应用配置并开启 Telnet
+            </button>
+          </div>
         </div>
       </section>
 
-      <!-- Step 2: Advanced Toolbox -->
+      <!-- Advanced Toolbox -->
       <section class="card action-card">
-        <h3>🧰 光猫高级功能区</h3>
+        <h3>🧰 光猫高级功能操作区</h3>
         <div class="button-grid">
           <button id="btn-test-telnet" class="btn btn-success">1. 测试 Telnet 握手与连通性</button>
           <button id="btn-credentials" class="btn btn-warning">2. 提取核心凭据 (宽带/超管/GPON密码)</button>
@@ -72,7 +110,7 @@
           <h3>📋 执行结果与数据输出</h3>
           <button id="btn-clear" class="btn btn-sm">清空日志</button>
         </div>
-        <pre id="output-box">// 点击上方“🚀 一键开启 / 设置 Telnet”开始...</pre>
+        <pre id="output-box">// 正在启动自检...</pre>
       </section>
     </div>
   </body>

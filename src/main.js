@@ -1,13 +1,24 @@
 const { invoke } = window.__TAURI__.core;
 
+// DOM references
 const outputBox = document.getElementById("output-box");
 const statusBadge = document.getElementById("telnet-status-badge");
-const pwdHint = document.getElementById("pwd-hint");
-const passInput = document.getElementById("pass");
-const userInput = document.getElementById("user");
-const ipInput = document.getElementById("ip");
+const dispIp = document.getElementById("disp-ip");
+const dispUser = document.getElementById("disp-user");
+const dispPass = document.getElementById("disp-pass");
+const dispPort = document.getElementById("disp-port");
 
-const getVal = (id) => document.getElementById(id).value.trim();
+const ipInput = document.getElementById("ip");
+const userInput = document.getElementById("user");
+const passInput = document.getElementById("pass");
+const pwdHint = document.getElementById("pwd-hint");
+
+// Active session state used by all action buttons
+let activeConfig = {
+  ip: "192.168.1.1",
+  user: "CMCCAdmin",
+  pass: "aDm8H%MdA",
+};
 
 function log(msg, isError = false) {
   const time = new Date().toLocaleTimeString();
@@ -21,11 +32,15 @@ function log(msg, isError = false) {
 
 function updateBadge(open) {
   if (open) {
-    statusBadge.textContent = "Telnet 状态: 已连通 (23端口在线)";
+    statusBadge.textContent = "Telnet 状态: 已在线 (23端口畅通)";
     statusBadge.style.background = "#16a34a";
+    dispPort.textContent = "已连通 (在线)";
+    dispPort.style.color = "#4ade80";
   } else {
     statusBadge.textContent = "Telnet 状态: 未连接";
     statusBadge.style.background = "#dc2626";
+    dispPort.textContent = "未连接 (端口关闭)";
+    dispPort.style.color = "#f87171";
   }
 }
 
@@ -50,7 +65,7 @@ function checkPasswordRule(pwd) {
 function updatePasswordHint() {
   const pwd = passInput.value.trim();
   if (!pwd) {
-    pwdHint.textContent = "💡 密码要求：必须同时包含字母、数字和特殊字符，不含空格，长度大于 8 位。";
+    pwdHint.textContent = "💡 选填项：留空则保持光猫当前密码不变。若输入新密码，必须大于8位且含字母/数字/特殊字符。";
     pwdHint.style.color = "#94a3b8";
     return;
   }
@@ -64,14 +79,53 @@ function updatePasswordHint() {
   }
 }
 
-async function callCommand(cmdName, args = {}) {
+// Auto detect and enable Telnet
+async function runAutoDetect(targetIp) {
+  const ip = targetIp || activeConfig.ip || "192.168.1.1";
+  log(`[自动模式] 正在启动自检，探测光猫 (${ip})...`);
+  statusBadge.textContent = "Telnet 状态: 探测中...";
+  statusBadge.style.background = "#d97706";
+
   try {
-    log(`正在执行: ${cmdName}...`);
+    const res = await invoke("auto_detect_telnet", { ip });
+
+    activeConfig.ip = res.ip;
+    activeConfig.user = res.telnet_user;
+    activeConfig.pass = res.telnet_pass;
+
+    // Update displays
+    dispIp.textContent = res.ip;
+    dispUser.textContent = res.telnet_user;
+    dispPass.textContent = res.telnet_pass;
+
+    // Sync to manual inputs as placeholder / default
+    ipInput.value = res.ip;
+    if (!userInput.value) userInput.placeholder = `当前: ${res.telnet_user}`;
+    if (!passInput.value) passInput.placeholder = `当前: ${res.telnet_pass}`;
+
+    const lines = [
+      res.message,
+      "",
+      "--- 自动探测执行详情 ---",
+      ...res.steps,
+    ];
+    log(lines.join("\n"), !res.success);
+    updateBadge(res.port_open);
+  } catch (err) {
+    log(err, true);
+    updateBadge(false);
+  }
+}
+
+// Call action command using active configuration
+async function callCommand(cmdName, extraArgs = {}) {
+  try {
+    log(`正在执行: ${cmdName}... (目标: ${activeConfig.ip})`);
     const res = await invoke(cmdName, {
-      ip: getVal("ip"),
-      user: getVal("user"),
-      pass: getVal("pass"),
-      ...args,
+      ip: activeConfig.ip,
+      user: activeConfig.user,
+      pass: activeConfig.pass,
+      ...extraArgs,
     });
     log(res);
   } catch (err) {
@@ -80,57 +134,84 @@ async function callCommand(cmdName, args = {}) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  // 1. Setup Tab Switching
+  const tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+
+      tab.classList.add("active");
+      const target = tab.getAttribute("data-tab");
+      document.getElementById(`tab-content-${target}`).classList.add("active");
+    });
+  });
+
+  // 2. Setup Password input watcher
   passInput.addEventListener("input", updatePasswordHint);
   updatePasswordHint();
 
+  // 3. Clear button
   document.getElementById("btn-clear").onclick = () => {
     outputBox.textContent = "// 日志已清空";
   };
 
+  // 4. Auto mode refresh button
+  document.getElementById("btn-auto-refresh").onclick = () => {
+    runAutoDetect(activeConfig.ip);
+  };
+
+  // 5. Manual mode default reset button
   document.getElementById("btn-reset-default").onclick = () => {
     userInput.value = "CMCCAdmin";
     passInput.value = "aDm8H%MdA";
     updatePasswordHint();
-    log("已恢复官方默认凭据: CMCCAdmin / aDm8H%MdA");
+    log("已填入官方默认凭据: CMCCAdmin / aDm8H%MdA");
   };
 
-  document.getElementById("btn-enable-telnet").onclick = async () => {
-    const ip = getVal("ip");
-    const user = getVal("user");
-    const pass = getVal("pass");
+  // 6. Manual mode apply button
+  document.getElementById("btn-manual-apply").onclick = async () => {
+    const ip = ipInput.value.trim() || "192.168.1.1";
+    const customUser = userInput.value.trim();
+    const customPass = passInput.value.trim();
 
-    // Client-side validation
-    const pwdErr = checkPasswordRule(pass);
-    if (pwdErr) {
-      log(`密码不符合规则: ${pwdErr}！请修改后重试。`, true);
-      passInput.focus();
-      return;
+    // If custom password provided, validate it
+    if (customPass) {
+      const err = checkPasswordRule(customPass);
+      if (err) {
+        log(`密码不符合规则: ${err}！请修改后重试。`, true);
+        passInput.focus();
+        return;
+      }
     }
 
-    const btn = document.getElementById("btn-enable-telnet");
+    const btn = document.getElementById("btn-manual-apply");
     btn.disabled = true;
-    btn.textContent = "⏳ 正在开启并配置...";
-    log(`正在向光猫下发开启指令 (账号: ${user}, 密码: ${pass})...`);
+    btn.textContent = "⏳ 正在应用配置...";
+    log(`[手动模式] 正在向光猫 (${ip}) 应用配置并开启 Telnet...`);
 
     try {
       const res = await invoke("enable_telnet", {
         ip,
-        user: user || null,
-        pass: pass || null,
+        user: customUser || null,
+        pass: customPass || null,
       });
 
       if (res.telnet_user) {
-        userInput.value = res.telnet_user;
+        activeConfig.user = res.telnet_user;
+        dispUser.textContent = res.telnet_user;
       }
       if (res.telnet_pass) {
-        passInput.value = res.telnet_pass;
-        updatePasswordHint();
+        activeConfig.pass = res.telnet_pass;
+        dispPass.textContent = res.telnet_pass;
       }
+      activeConfig.ip = ip;
+      dispIp.textContent = ip;
 
       const lines = [
         res.message,
         "",
-        "--- 执行详情 ---",
+        "--- 手动模式执行详情 ---",
         ...res.steps,
       ];
       log(lines.join("\n"), !res.success);
@@ -140,20 +221,21 @@ window.addEventListener("DOMContentLoaded", () => {
       updateBadge(false);
     } finally {
       btn.disabled = false;
-      btn.textContent = "🚀 一键开启 / 设置 Telnet";
+      btn.textContent = "🚀 应用配置并开启 Telnet";
     }
   };
 
+  // 7. Advanced toolbox actions
   document.getElementById("btn-test-telnet").onclick = () => {
     callCommand("test_telnet");
   };
 
-  document.getElementById("btn-sys-info").onclick = () => {
-    callCommand("get_system_info");
-  };
-
   document.getElementById("btn-credentials").onclick = () => {
     callCommand("get_credentials");
+  };
+
+  document.getElementById("btn-sys-info").onclick = () => {
+    callCommand("get_system_info");
   };
 
   document.getElementById("btn-surveillance").onclick = () => {
@@ -164,12 +246,18 @@ window.addEventListener("DOMContentLoaded", () => {
     callCommand("kill_surveillance");
   };
 
+  // 8. Custom shell command
   document.getElementById("btn-exec-cmd").onclick = () => {
-    const cmd = getVal("custom-cmd");
+    const cmd = document.getElementById("custom-cmd").value.trim();
     if (!cmd) {
       log("请输入要执行的指令！", true);
       return;
     }
     callCommand("exec_shell_cmd", { cmd });
   };
+
+  // 9. Auto Launch on App Startup
+  setTimeout(() => {
+    runAutoDetect("192.168.1.1");
+  }, 300);
 });

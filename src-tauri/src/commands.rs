@@ -1,7 +1,14 @@
 use tauri::command;
-use crate::web_client::{WebClient, EnableTelnetResult};
+use crate::web_client::{WebClient, EnableTelnetResult, AutoDetectResult};
 use crate::telnet_client::TelnetClient;
 use crate::modem_manager::{ModemManager, SystemInfo, Credentials, SurveillanceStatus};
+
+#[command]
+pub async fn auto_detect_telnet(ip: Option<String>) -> Result<AutoDetectResult, String> {
+    let target_ip = ip.unwrap_or_else(|| "192.168.1.1".to_string());
+    let client = WebClient::new(&target_ip);
+    client.auto_detect_and_enable().await
+}
 
 #[command]
 pub async fn enable_telnet(
