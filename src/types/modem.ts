@@ -1,7 +1,10 @@
 export interface SystemInfo {
   cpu_model: string;
   cpu_cores: number;
+  cpu_load_1m: number;
+  cpu_load_percent: number;
   temperature: string;
+  temperature_c: number | null;
   uptime: string;
   ram_total_mb: number;
   ram_used_mb: number;

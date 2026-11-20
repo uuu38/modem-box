@@ -6,7 +6,10 @@ use crate::telnet_client::TelnetClient;
 pub struct SystemInfo {
     pub cpu_model: String,
     pub cpu_cores: usize,
+    pub cpu_load_1m: f64,
+    pub cpu_load_percent: u64,
     pub temperature: String,
+    pub temperature_c: Option<u64>,
     pub uptime: String,
     pub ram_total_mb: u64,
     pub ram_used_mb: u64,
@@ -45,27 +48,59 @@ impl ModemManager {
     /// Retrieve and parse real-time system hardware & network state
     pub async fn get_system_info(client: &mut TelnetClient) -> Result<SystemInfo, String> {
         let cpu_info = client.exec("cat /proc/cpuinfo").await?;
-        let temp_raw = client.exec("cat /sys/class/thermal/thermal_zone0/temp 2>/tmp/.null").await.unwrap_or_default();
+        let temp_raw = client
+            .exec("cat /sys/class/thermal/thermal_zone*/temp 2>/tmp/.null | head -n 1")
+            .await
+            .unwrap_or_default();
+        let load_raw = client.exec("cat /proc/loadavg 2>/tmp/.null").await.unwrap_or_default();
         let uptime_raw = client.exec("cat /proc/uptime").await.unwrap_or_default();
         let mem_info = client.exec("cat /proc/meminfo").await?;
         let pon_raw = client.exec("cat /tmp/cmcc_pon_state 2>/tmp/.null").await.unwrap_or_default();
         let kernel = client.exec("uname -r").await.unwrap_or_else(|_| "5.10.0".to_string());
         let brctl_raw = client.exec("brctl show").await.unwrap_or_default();
 
-        // Parse CPU
-        let cpu_model = cpu_info.lines()
-            .find(|l| l.contains("model name"))
-            .map(|l| l.split(':').nth(1).unwrap_or("").trim().to_string())
+        // Parse CPU model with ARMv7 /proc/cpuinfo fallbacks
+        let cpu_model = ["model name", "Processor", "Hardware"]
+            .iter()
+            .find_map(|key| {
+                cpu_info
+                    .lines()
+                    .find(|l| l.trim_start().starts_with(key))
+                    .and_then(|l| l.split(':').nth(1))
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            })
             .unwrap_or_else(|| "ARMv7 Processor".to_string());
 
         let cpu_cores = cpu_info.lines().filter(|l| l.starts_with("processor")).count().max(1);
 
-        // Parse Temp
-        let temp_num: u64 = temp_raw.trim().parse().unwrap_or(60000);
-        let temperature = format!("{}°C", temp_num / 1000);
+        let cpu_load_1m: f64 = load_raw
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let cpu_load_percent = ((cpu_load_1m / cpu_cores as f64) * 100.0)
+            .round()
+            .clamp(0.0, 100.0) as u64;
+
+        // Parse Temp (handle both millidegrees e.g. 58000 and degrees e.g. 58)
+        let temperature_c = temp_raw
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|v| if v >= 1000 { v / 1000 } else { v })
+            .filter(|&c| c > 0 && c < 150);
+        let temperature = match temperature_c {
+            Some(c) => format!("{}°C", c),
+            None => "--".to_string(),
+        };
 
         // Parse Uptime
-        let up_secs: u64 = uptime_raw.split_whitespace().next().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0) as u64;
+        let up_secs: u64 = uptime_raw
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0) as u64;
         let hours = up_secs / 3600;
         let mins = (up_secs % 3600) / 60;
         let uptime = format!("{}小时{}分钟", hours, mins);
@@ -74,6 +109,8 @@ impl ModemManager {
         let mut tot_kb = 0u64;
         let mut free_kb = 0u64;
         let mut avail_kb = 0u64;
+        let mut buffers_kb = 0u64;
+        let mut cached_kb = 0u64;
 
         for line in mem_info.lines() {
             if line.starts_with("MemTotal:") {
@@ -82,9 +119,15 @@ impl ModemManager {
                 free_kb = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             } else if line.starts_with("MemAvailable:") {
                 avail_kb = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+            } else if line.starts_with("Buffers:") {
+                buffers_kb = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+            } else if line.starts_with("Cached:") {
+                cached_kb = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             }
         }
-        if avail_kb == 0 { avail_kb = free_kb; }
+        if avail_kb == 0 {
+            avail_kb = free_kb + buffers_kb + cached_kb;
+        }
 
         let ram_total_mb = tot_kb / 1024;
         let ram_free_mb = avail_kb / 1024;
@@ -93,7 +136,7 @@ impl ModemManager {
 
         // Parse PON
         let pon_status = if pon_raw.trim() == "1" {
-            "已注册上线 (Registered)".to_string()
+            "已注册上线".to_string()
         } else {
             "未就绪 / 同步中".to_string()
         };
@@ -108,7 +151,10 @@ impl ModemManager {
         Ok(SystemInfo {
             cpu_model,
             cpu_cores,
+            cpu_load_1m,
+            cpu_load_percent,
             temperature,
+            temperature_c,
             uptime,
             ram_total_mb,
             ram_used_mb,
