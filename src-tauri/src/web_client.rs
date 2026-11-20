@@ -21,6 +21,36 @@ pub struct WebClient {
     base_url: String,
 }
 
+/// Validate modem password rule:
+/// Must contain letters, digits, and special characters, no spaces, length > 8
+pub fn validate_telnet_password(password: &str) -> Result<(), String> {
+    if password.len() <= 8 {
+        return Err(format!(
+            "密码格式错误：密码长度必须大于 8 位（当前 {} 位）！",
+            password.len()
+        ));
+    }
+    if password.chars().any(char::is_whitespace) {
+        return Err("密码格式错误：密码不能包含空格！".to_string());
+    }
+    let has_letter = password.chars().any(|c| c.is_ascii_alphabetic());
+    let has_digit = password.chars().any(|c| c.is_ascii_digit());
+    let has_special = password
+        .chars()
+        .any(|c| !c.is_ascii_alphanumeric() && !c.is_whitespace());
+
+    if !has_letter {
+        return Err("密码格式错误：必须包含至少一个英文字母！".to_string());
+    }
+    if !has_digit {
+        return Err("密码格式错误：必须包含至少一个数字！".to_string());
+    }
+    if !has_special {
+        return Err("密码格式错误：必须包含至少一个特殊字符（例如 %、#、*、@ 等）！".to_string());
+    }
+    Ok(())
+}
+
 impl WebClient {
     pub fn new(ip: &str) -> Self {
         let client = Client::builder()
@@ -45,23 +75,20 @@ impl WebClient {
         )
     }
 
-    /// Enable Telnet using the zero-authentication /setObjs & /getObjs API
-    /// 1. Query /getObjs for current TelnetUserName & TelnetPassword
-    /// 2. Post /setObjs with TelnetEnable: true
-    /// 3. Verify port 23 connectivity
+    /// Enable Telnet and optionally set custom username/password
     pub async fn enable_telnet_direct(
         &self,
-        fallback_user: Option<&str>,
-        fallback_pass: Option<&str>,
+        custom_user: Option<&str>,
+        custom_pass: Option<&str>,
     ) -> Result<EnableTelnetResult, String> {
         let mut steps = Vec::new();
 
-        // Step 1: Query current service management info
+        // 1. Query current service management info
         let get_url = format!("{}/getObjs?waitTimeoutMs=5000", self.base_url);
         let get_body = r#"[{"fullPath":"InternetGatewayDevice.DeviceInfo.X_CMCC_ServiceManage."}]"#;
 
-        let mut telnet_user = fallback_user.unwrap_or("CMCCAdmin").to_string();
-        let mut telnet_pass = fallback_pass.unwrap_or("aDm8H%MdA").to_string();
+        let mut current_user = "CMCCAdmin".to_string();
+        let mut current_pass = "aDm8H%MdA".to_string();
 
         let query_res = self
             .client
@@ -78,36 +105,45 @@ impl WebClient {
                     if let Some(obj) = arr.as_array().and_then(|a| a.first()) {
                         if let Some(u) = obj.get("TelnetUserName").and_then(|v| v.as_str()) {
                             if !u.is_empty() {
-                                telnet_user = u.to_string();
+                                current_user = u.to_string();
                             }
                         }
                         if let Some(p) = obj.get("TelnetPassword").and_then(|v| v.as_str()) {
                             if !p.is_empty() {
-                                telnet_pass = p.to_string();
+                                current_pass = p.to_string();
                             }
                         }
                         steps.push(format!(
-                            "✅ [1/3] 免密读取光猫服务配置成功！Telnet 账号: {}, 密码: {}",
-                            telnet_user, telnet_pass
+                            "✅ [1/3] 从光猫读取到当前配置：账号 [{}]，密码 [{}]",
+                            current_user, current_pass
                         ));
                     }
                 }
             }
         }
 
-        if steps.is_empty() {
-            steps.push(format!(
-                "ℹ️ [1/3] 读取服务配置未直接返回，使用预设凭据: {} / {}",
-                telnet_user, telnet_pass
-            ));
-        }
+        // 2. Determine target user & password
+        let final_user = match custom_user {
+            Some(u) if !u.trim().is_empty() => u.trim().to_string(),
+            _ => current_user,
+        };
 
-        // Step 2: Post /setObjs to enable Telnet
+        let final_pass = match custom_pass {
+            Some(p) if !p.trim().is_empty() => {
+                let trimmed = p.trim();
+                // Validate format
+                validate_telnet_password(trimmed)?;
+                trimmed.to_string()
+            }
+            _ => current_pass,
+        };
+
+        // 3. Post /setObjs to enable Telnet with specified credentials
         let set_url = format!("{}/setObjs", self.base_url);
         let set_payload = serde_json::json!([{
             "TelnetEnable": true,
-            "TelnetUserName": telnet_user,
-            "TelnetPassword": telnet_pass,
+            "TelnetUserName": final_user,
+            "TelnetPassword": final_pass,
             "fullPath": "InternetGatewayDevice.DeviceInfo.X_CMCC_ServiceManage."
         }]);
 
@@ -124,12 +160,16 @@ impl WebClient {
         let status = set_res.status();
         let resp_text = set_res.text().await.unwrap_or_default();
         steps.push(format!(
-            "✅ [2/3] 提交 /setObjs 开启指令成功 (HTTP {}{})",
+            "✅ [2/3] 下发开启与凭据配置成功 (HTTP {}) -> 账号: [{}], 密码: [{}]",
             status.as_u16(),
-            if resp_text.is_empty() { "".to_string() } else { format!(": {}", resp_text) }
+            final_user,
+            final_pass
         ));
+        if !resp_text.is_empty() {
+            steps.push(format!("    设备返回: {}", resp_text));
+        }
 
-        // Step 3: Probe port 23
+        // 4. Probe port 23
         let mut port_open = false;
         for i in 1..=4 {
             if self.check_telnet_port().await {
@@ -146,21 +186,52 @@ impl WebClient {
             Ok(EnableTelnetResult {
                 success: true,
                 port_open: true,
-                telnet_user: Some(telnet_user),
-                telnet_pass: Some(telnet_pass),
+                telnet_user: Some(final_user),
+                telnet_pass: Some(final_pass),
                 steps,
-                message: format!("🎉 Telnet 一键开启成功！({}:23 已就绪)", self.ip),
+                message: format!("🎉 Telnet 开启成功！({}:23 已就绪)", self.ip),
             })
         } else {
             steps.push(format!("❌ [3/3] 指令已发送，但 {}:23 端口暂未响应", self.ip));
             Ok(EnableTelnetResult {
                 success: false,
                 port_open: false,
-                telnet_user: Some(telnet_user),
-                telnet_pass: Some(telnet_pass),
+                telnet_user: Some(final_user),
+                telnet_pass: Some(final_pass),
                 steps,
-                message: "已向光猫发送开启指令，但 23 端口尚未开放，请稍等 3 秒后再试一次".to_string(),
+                message: "已向光猫发送开启指令，但 23 端口尚未开放，请稍等 3 秒后再试".to_string(),
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_telnet_password;
+
+    #[test]
+    fn test_valid_passwords() {
+        assert!(validate_telnet_password("aDm8H%MdA").is_ok());
+        assert!(validate_telnet_password("Pass1234#").is_ok());
+        assert!(validate_telnet_password("Super_Admin_2026").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_passwords() {
+        // <= 8 chars
+        assert!(validate_telnet_password("Aa1!").is_err());
+        assert!(validate_telnet_password("Aa1!5678").is_err()); // exactly 8 chars -> error
+
+        // contains space
+        assert!(validate_telnet_password("Aa 1234567!").is_err());
+
+        // missing special
+        assert!(validate_telnet_password("Aa123456789").is_err());
+
+        // missing digits
+        assert!(validate_telnet_password("AaBbCcDdEe!").is_err());
+
+        // missing letters
+        assert!(validate_telnet_password("1234567890!@#").is_err());
     }
 }

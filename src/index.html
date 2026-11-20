@@ -16,18 +16,33 @@
         <span class="badge" id="telnet-status-badge">Telnet 状态: 未检测</span>
       </header>
 
-      <!-- Step 1: Zero-auth One-click Enable Telnet -->
+      <!-- Step 1: Telnet Credentials & Enable -->
       <section class="card config-card">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <h3>⚡ 一键开启 Telnet（无需光猫密码，自动读取凭据）</h3>
-          <button id="btn-enable-telnet" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">
-            🚀 一键开启 Telnet
-          </button>
+          <h3>⚡ Telnet 开启与账号密码配置</h3>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-reset-default" class="btn btn-sm btn-secondary" title="填入默认官方账号与密码">
+              恢复默认 (aDm8H%MdA)
+            </button>
+            <button id="btn-enable-telnet" class="btn btn-primary" style="padding: 10px 18px; font-size: 14px;">
+              🚀 一键开启 / 设置 Telnet
+            </button>
+          </div>
         </div>
+
         <div class="form-row" style="margin-top: 12px;">
-          <label style="flex: 1;">光猫 IP: <input type="text" id="ip" value="192.168.1.1" /></label>
-          <label style="flex: 1;">Telnet 账号: <input type="text" id="user" value="CMCCAdmin" placeholder="点击一键开启后自动获取" /></label>
-          <label style="flex: 1;">Telnet 密码: <input type="text" id="pass" value="aDm8H%MdA" placeholder="点击一键开启后自动获取" /></label>
+          <label style="flex: 1;">光猫 IP: 
+            <input type="text" id="ip" value="192.168.1.1" />
+          </label>
+          <label style="flex: 1;">Telnet 账号: 
+            <input type="text" id="user" value="CMCCAdmin" placeholder="例如: CMCCAdmin" />
+          </label>
+          <label style="flex: 1.5;">Telnet 密码 (支持自定义): 
+            <input type="text" id="pass" value="aDm8H%MdA" placeholder="必须大于8位，含字母、数字、特殊字符" />
+          </label>
+        </div>
+        <div id="pwd-hint" style="font-size: 12px; margin-top: 6px; color: #94a3b8;">
+          💡 密码要求：必须同时包含字母、数字和特殊字符，不含空格，长度必须大于 8 位（至少 9 位）。
         </div>
       </section>
 
@@ -57,7 +72,7 @@
           <h3>📋 执行结果与数据输出</h3>
           <button id="btn-clear" class="btn btn-sm">清空日志</button>
         </div>
-        <pre id="output-box">// 点击上方“🚀 一键开启 Telnet”即可全自动开启并连接光猫...</pre>
+        <pre id="output-box">// 点击上方“🚀 一键开启 / 设置 Telnet”开始...</pre>
       </section>
     </div>
   </body>
