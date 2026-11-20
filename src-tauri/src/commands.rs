@@ -1,12 +1,16 @@
 use tauri::command;
-use crate::web_client::WebClient;
+use crate::web_client::{WebClient, EnableTelnetResult};
 use crate::telnet_client::TelnetClient;
 use crate::modem_manager::{ModemManager, SystemInfo, Credentials, SurveillanceStatus};
 
 #[command]
-pub async fn enable_telnet(ip: String) -> Result<String, String> {
+pub async fn enable_telnet(
+    ip: String,
+    web_user: String,
+    web_pass: String,
+) -> Result<EnableTelnetResult, String> {
     let client = WebClient::new(&ip);
-    client.trigger_entelnet_cgi().await
+    client.enable_telnet_via_web(&web_user, &web_pass).await
 }
 
 #[command]

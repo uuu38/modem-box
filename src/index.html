@@ -13,28 +13,33 @@
       <!-- Header -->
       <header class="app-header">
         <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.1.0</h2>
-        <span class="badge">Tauri 2.0 + Rust 核心驱动</span>
+        <span class="badge" id="telnet-status-badge">Telnet 状态: 未检测</span>
       </header>
 
-      <!-- Connection Bar -->
+      <!-- Step 1: Web Auth -> Enable Telnet -->
       <section class="card config-card">
-        <div class="form-row">
+        <h3>第一步：输入光猫背面普通密码，一键开启 Telnet</h3>
+        <div class="form-row" style="margin-top: 10px; align-items: flex-end;">
           <label>光猫 IP: <input type="text" id="ip" value="192.168.1.1" /></label>
-          <label>Telnet 账号: <input type="text" id="user" value="CMCCAdmin" /></label>
-          <label>Telnet 密码: <input type="text" id="pass" value="aDm8H%MdA" /></label>
+          <label>Web 普通账号: <input type="text" id="web-user" value="user" /></label>
+          <label>Web 普通密码: <input type="text" id="web-pass" placeholder="输入光猫背面普通用户密码" /></label>
+          <button id="btn-enable-telnet" class="btn btn-primary" style="height: 36px;">🚀 一键开启 Telnet</button>
         </div>
       </section>
 
-      <!-- Action Buttons Grid -->
+      <!-- Step 2: Telnet Credentials & Operations -->
       <section class="card action-card">
-        <h3>⚡ 核心功能操作区</h3>
+        <h3>第二步：Telnet 高级工具箱</h3>
+        <div class="form-row" style="margin-top: 10px;">
+          <label>Telnet 账号: <input type="text" id="user" value="CMCCAdmin" /></label>
+          <label>Telnet 密码: <input type="text" id="pass" value="aDm8H%MdA" /></label>
+        </div>
         <div class="button-grid">
-          <button id="btn-enable-telnet" class="btn btn-primary">1. 网页开启 Telnet (/entelnet.cgi)</button>
-          <button id="btn-test-telnet" class="btn btn-success">2. 测试 Telnet 握手与连接</button>
-          <button id="btn-sys-info" class="btn btn-info">3. 读取系统硬件与链路状态</button>
-          <button id="btn-credentials" class="btn btn-warning">4. 提取核心凭据 (LOID/宽带/超管)</button>
-          <button id="btn-surveillance" class="btn btn-secondary">5. 运营商监控专项审计</button>
-          <button id="btn-kill-surv" class="btn btn-danger">6. 一键停止 Java/DPI 监控释放内存</button>
+          <button id="btn-test-telnet" class="btn btn-success">1. 测试 Telnet 握手与连接</button>
+          <button id="btn-sys-info" class="btn btn-info">2. 读取系统硬件与链路状态</button>
+          <button id="btn-credentials" class="btn btn-warning">3. 提取核心凭据 (LOID/宽带/超管)</button>
+          <button id="btn-surveillance" class="btn btn-secondary">4. 运营商监控专项审计</button>
+          <button id="btn-kill-surv" class="btn btn-danger">5. 一键停止 Java/DPI 监控释放内存</button>
         </div>
       </section>
 
