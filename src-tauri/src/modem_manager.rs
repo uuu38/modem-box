@@ -270,59 +270,85 @@ impl ModemManager {
 
     /// Terminate Java DPI container and lock startup scripts to release memory
     pub async fn kill_surveillance(client: &mut TelnetClient) -> Result<String, String> {
-        // 1. Kill java process
-        client.exec("killall -9 java 2>/tmp/.null").await?;
+        // 1. Kill java process (and any hung start_java wrapper)
+        client.exec("killall -9 java start_java.sh 2>/tmp/.null").await?;
 
-        // 2. Lock startup script
+        // 2. Lock startup script when permitted (root)
         client.exec("chmod 000 /usr/cmcc_app/conf/start_java.sh 2>/tmp/.null").await?;
 
         // 3. Verify
         let status = Self::check_surveillance(client).await?;
         if !status.java_running {
-            Ok("成功停止 Java/DPI 监控容器并锁定自启，内存已完全释放！".to_string())
+            Ok("成功停止 Java/DPI 监控容器并释放内存！".to_string())
         } else {
-            Err("尝试停止后仍有 Java 进程残留，请重试".to_string())
+            Err(format!(
+                "尝试停止后仍有 Java 进程运行 (PID: {})，可能是系统高权限进程，请检查权限",
+                status.java_pid.unwrap_or_else(|| "?".to_string())
+            ))
         }
     }
 
-    /// Restore startup script permissions and relaunch Java OSGi container
+    /// Restore startup script permissions (when root) and launch Java OSGi container
     pub async fn restore_surveillance(client: &mut TelnetClient) -> Result<String, String> {
-        // 1. Ensure /tmp/.null exists and unlock startup script permissions
-        client
-            .exec("touch /tmp/.null; chmod 777 /usr/cmcc_app/conf/start_java.sh 2>/tmp/.null")
-            .await?;
+        let uid_raw = client.exec("touch /tmp/.null; id -u").await?;
+        let is_root = uid_raw.lines().last().unwrap_or("").trim() == "0";
 
-        // 2. Avoid duplicate launch if already running
+        if is_root {
+            client
+                .exec("chmod 777 /usr/cmcc_app/conf/start_java.sh 2>/tmp/.null")
+                .await?;
+        }
+
+        // Avoid duplicate launch if already running
         let current = Self::check_surveillance(client).await?;
         if current.java_running {
             return Ok(format!(
-                "已恢复自启脚本权限，Java 容器当前正在运行 (PID: {})",
+                "Java 容器当前正在运行 (PID: {})",
                 current.java_pid.unwrap_or_else(|| "?".to_string())
             ));
         }
 
-        // 3. Relaunch Java OSGi startup script detached from telnet PTY
-        let launch_check = client
-            .exec("if [ -f /usr/bin/start_java.sh ]; then sh /usr/bin/start_java.sh </tmp/.null >/tmp/.null 2>&1 & echo OK; elif [ -f /usr/cmcc_app/conf/start_java.sh ]; then sh /usr/cmcc_app/conf/start_java.sh </tmp/.null >/tmp/.null 2>&1 & echo OK; else echo MISSING; fi")
-            .await?;
+        if is_root {
+            let launch_check = client
+                .exec("if [ -f /usr/bin/start_java.sh ]; then sh /usr/bin/start_java.sh </tmp/.null >/tmp/.null 2>&1 & echo OK; elif [ -f /usr/cmcc_app/conf/start_java.sh ]; then sh /usr/cmcc_app/conf/start_java.sh </tmp/.null >/tmp/.null 2>&1 & echo OK; else echo MISSING; fi")
+                .await?;
+            if launch_check.contains("MISSING") {
+                return Err("未在光猫上找到 start_java.sh 启动脚本".to_string());
+            }
+        } else {
+            // Non-root Telnet users (e.g. uid=1005) get blocked on `su osgi` tty password prompt inside start_java.sh;
+            // launch the OpenJDK + Felix OSGi container directly as the current user instead.
+            let bin_check = client
+                .exec("[ -x /usr/cmcc_fwk/java/bin/java ] && [ -f /usr/cmcc_fwk/osgi/bin/felix.jar ] && echo READY || echo MISSING")
+                .await?;
+            if bin_check.contains("MISSING") {
+                return Err("未找到 Java (/usr/cmcc_fwk/java/bin/java) 或 Felix 运行时".to_string());
+            }
 
-        if launch_check.contains("MISSING") {
-            return Err("未在光猫上找到 start_java.sh 启动脚本".to_string());
+            client
+                .exec("export OSGI_HOME=/usr/cmcc_fwk/osgi JAVA_HOME=/usr/cmcc_fwk/java")
+                .await?;
+            client
+                .exec("export PATH=$JAVA_HOME/bin:$PATH LD_LIBRARY_PATH=/hgslib:$JAVA_HOME/lib/aarch32:$JAVA_HOME/lib/aarch32/client:$JAVA_HOME/lib/aarch32/jli:$LD_LIBRARY_PATH")
+                .await?;
+            client
+                .exec("cd $OSGI_HOME && mkdir -p /tmp/bundle0 && rm -rf /tmp/fileinstall-* && java -Dfelix.config.properties=file:/usr/cmcc_app/conf/config.properties -Dorg.ops4j.pax.logging.DefaultServiceLog.level=ERROR -Dgosh.args=--noi -Djava.net.preferIPv4Stack=false -Duser.timezone=GMT+8 -Djava.security.policy=./conf/all.policy -Dorg.osgi.framework.security=osgi -Dsun.net.inetaddr.ttl=30 -Dfile.encoding=utf-8 -Dsun.jnu.encoding=utf-8 -Xms48M -Xmx128M -Xss256k -jar bin/felix.jar </tmp/.null >/tmp/.null 2>&1 &")
+                .await?;
         }
 
-        // 4. Wait briefly and poll for JVM process startup
-        for _ in 0..3 {
-            sleep(Duration::from_millis(1200)).await;
+        // Poll briefly for JVM process startup
+        for _ in 0..4 {
+            sleep(Duration::from_millis(1000)).await;
             let status = Self::check_surveillance(client).await?;
             if status.java_running {
                 return Ok(format!(
-                    "已恢复自启权限并重新启动 Java/DPI 容器！(PID: {})",
+                    "已成功启动 Java/DPI 容器！(PID: {})",
                     status.java_pid.unwrap_or_else(|| "?".to_string())
                 ));
             }
         }
 
-        Ok("已恢复 /usr/cmcc_app/conf/start_java.sh 自启权限并触发后台启动（JVM 初始化约需数秒，请稍后刷新查看）".to_string())
+        Err("已触发后台启动，但未检测到 Java 进程存活，请展开日志或检查终端输出".to_string())
     }
 }
 

@@ -174,7 +174,10 @@ export function App() {
       } catch (err) {
         const e = typeof err === "string" ? err : String(err);
         addLog("error", `${meta.errLabel}: ${e}`);
-        addToast("error", meta.errLabel);
+        addToast(
+          "error",
+          `${meta.errLabel}: ${e.length > 60 ? `${e.slice(0, 60)}...` : e}`
+        );
       }
     },
     [addLog, addToast, config.ip, config.pass, config.user, fetchSystemInfoWith]
