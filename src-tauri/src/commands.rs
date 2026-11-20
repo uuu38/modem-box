@@ -6,11 +6,11 @@ use crate::modem_manager::{ModemManager, SystemInfo, Credentials, SurveillanceSt
 #[command]
 pub async fn enable_telnet(
     ip: String,
-    web_user: String,
-    web_pass: String,
+    user: Option<String>,
+    pass: Option<String>,
 ) -> Result<EnableTelnetResult, String> {
     let client = WebClient::new(&ip);
-    client.enable_telnet_via_web(&web_user, &web_pass).await
+    client.enable_telnet_direct(user.as_deref(), pass.as_deref()).await
 }
 
 #[command]

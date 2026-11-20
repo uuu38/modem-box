@@ -12,33 +12,33 @@
     <div class="app-layout">
       <!-- Header -->
       <header class="app-header">
-        <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.1.0</h2>
+        <h2>🛠️ 天邑/烽火光猫全能工具箱 v0.2.0</h2>
         <span class="badge" id="telnet-status-badge">Telnet 状态: 未检测</span>
       </header>
 
-      <!-- Step 1: Web Auth -> Enable Telnet -->
+      <!-- Step 1: Zero-auth One-click Enable Telnet -->
       <section class="card config-card">
-        <h3>第一步：输入光猫背面普通密码，一键开启 Telnet</h3>
-        <div class="form-row" style="margin-top: 10px; align-items: flex-end;">
-          <label>光猫 IP: <input type="text" id="ip" value="192.168.1.1" /></label>
-          <label>Web 普通账号: <input type="text" id="web-user" value="user" /></label>
-          <label>Web 普通密码: <input type="text" id="web-pass" placeholder="输入光猫背面普通用户密码" /></label>
-          <button id="btn-enable-telnet" class="btn btn-primary" style="height: 36px;">🚀 一键开启 Telnet</button>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3>⚡ 一键开启 Telnet（无需光猫密码，自动读取凭据）</h3>
+          <button id="btn-enable-telnet" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">
+            🚀 一键开启 Telnet
+          </button>
+        </div>
+        <div class="form-row" style="margin-top: 12px;">
+          <label style="flex: 1;">光猫 IP: <input type="text" id="ip" value="192.168.1.1" /></label>
+          <label style="flex: 1;">Telnet 账号: <input type="text" id="user" value="CMCCAdmin" placeholder="点击一键开启后自动获取" /></label>
+          <label style="flex: 1;">Telnet 密码: <input type="text" id="pass" value="aDm8H%MdA" placeholder="点击一键开启后自动获取" /></label>
         </div>
       </section>
 
-      <!-- Step 2: Telnet Credentials & Operations -->
+      <!-- Step 2: Advanced Toolbox -->
       <section class="card action-card">
-        <h3>第二步：Telnet 高级工具箱</h3>
-        <div class="form-row" style="margin-top: 10px;">
-          <label>Telnet 账号: <input type="text" id="user" value="CMCCAdmin" /></label>
-          <label>Telnet 密码: <input type="text" id="pass" value="aDm8H%MdA" /></label>
-        </div>
+        <h3>🧰 光猫高级功能区</h3>
         <div class="button-grid">
-          <button id="btn-test-telnet" class="btn btn-success">1. 测试 Telnet 握手与连接</button>
-          <button id="btn-sys-info" class="btn btn-info">2. 读取系统硬件与链路状态</button>
-          <button id="btn-credentials" class="btn btn-warning">3. 提取核心凭据 (LOID/宽带/超管)</button>
-          <button id="btn-surveillance" class="btn btn-secondary">4. 运营商监控专项审计</button>
+          <button id="btn-test-telnet" class="btn btn-success">1. 测试 Telnet 握手与连通性</button>
+          <button id="btn-credentials" class="btn btn-warning">2. 提取核心凭据 (宽带/超管/GPON密码)</button>
+          <button id="btn-sys-info" class="btn btn-info">3. 读取系统硬件、CPU 与内存信息</button>
+          <button id="btn-surveillance" class="btn btn-secondary">4. 运营商流控监控审计 (DPI/Andlink)</button>
           <button id="btn-kill-surv" class="btn btn-danger">5. 一键停止 Java/DPI 监控释放内存</button>
         </div>
       </section>
@@ -46,7 +46,7 @@
       <!-- Custom Command -->
       <section class="card cmd-card">
         <div class="cmd-row">
-          <input type="text" id="custom-cmd" placeholder="输入自定义 Shell 命令，例如: free -m 或 ifconfig" />
+          <input type="text" id="custom-cmd" placeholder="输入自定义 Shell 命令，例如: free -m 或 ps | grep java" />
           <button id="btn-exec-cmd" class="btn btn-dark">执行指令</button>
         </div>
       </section>
@@ -55,9 +55,9 @@
       <section class="card output-card">
         <div class="output-header">
           <h3>📋 执行结果与数据输出</h3>
-          <button id="btn-clear" class="btn btn-sm">清空</button>
+          <button id="btn-clear" class="btn btn-sm">清空日志</button>
         </div>
-        <pre id="output-box">// 等待执行操作...</pre>
+        <pre id="output-box">// 点击上方“🚀 一键开启 Telnet”即可全自动开启并连接光猫...</pre>
       </section>
     </div>
   </body>

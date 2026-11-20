@@ -16,10 +16,10 @@ function log(msg, isError = false) {
 
 function updateBadge(open) {
   if (open) {
-    statusBadge.textContent = "Telnet 状态: 已开启 (23端口通)";
+    statusBadge.textContent = "Telnet 状态: 已连通 (23端口在线)";
     statusBadge.style.background = "#16a34a";
   } else {
-    statusBadge.textContent = "Telnet 状态: 未开启";
+    statusBadge.textContent = "Telnet 状态: 未连接";
     statusBadge.style.background = "#dc2626";
   }
 }
@@ -46,31 +46,32 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-enable-telnet").onclick = async () => {
     const ip = getVal("ip");
-    const webUser = getVal("web-user");
-    const webPass = getVal("web-pass");
-
-    if (!webPass) {
-      log("请先输入光猫背面的普通用户密码！", true);
-      document.getElementById("web-pass").focus();
-      return;
-    }
+    const user = getVal("user");
+    const pass = getVal("pass");
 
     const btn = document.getElementById("btn-enable-telnet");
     btn.disabled = true;
-    btn.textContent = "⏳ 正在鉴权并开启...";
-    log("正在向光猫发起 Web 鉴权登录并开启 Telnet...");
+    btn.textContent = "⏳ 正在开启 Telnet...";
+    log("正在通过免鉴权通道发送开启指令并检测端口...");
 
     try {
       const res = await invoke("enable_telnet", {
         ip,
-        webUser,
-        webPass,
+        user: user || null,
+        pass: pass || null,
       });
+
+      if (res.telnet_user) {
+        document.getElementById("user").value = res.telnet_user;
+      }
+      if (res.telnet_pass) {
+        document.getElementById("pass").value = res.telnet_pass;
+      }
 
       const lines = [
         res.message,
         "",
-        "--- 执行步骤详情 ---",
+        "--- 执行详情 ---",
         ...res.steps,
       ];
       log(lines.join("\n"), !res.success);
