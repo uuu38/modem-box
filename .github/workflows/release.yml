@@ -50,9 +50,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tauriScript: bun run tauri
           tagName: v__VERSION__
           releaseName: "ModemBox v__VERSION__"
-          releaseBody: "请查阅 [CHANGELOG.md](./CHANGELOG.md) 获取本版本完整更新内容。"
-          releaseDraft: true
+          releaseBody: |
+            ### ✨ ModemBox v__VERSION__
+
+            跨平台光猫硬件监测、核心凭据提取与安全加固桌面工具箱（Tauri 2.0 + Rust + React 19）。
+
+            **主要亮点**
+            - 📊 **实时硬件仪表盘**：`/proc/stat` 静默差分真实 CPU 占用、20 次采样趋势折线（Sparkline）、SoC/光模块双温控、GPON 光功率（RX/TX dBm）及 4s 实时轮询
+            - 🔐 **核心凭据库**：按需只读提取宽带 PPPoE、Web 超管、GPON 密码、SN 码与基准 MAC，支持全局显隐与一键导出摘要
+            - 🛡️ **安全审计与加固**：Java OSGi 容器停用/恢复、桥接防卡死 LAN IPv6 RA/DHCPv6 永久开关、内置 FTP 21 端口开关、TR-069 通道隔离与公网外联实测
+            - 💻 **快捷终端与快捷键**：哨兵分帧解决长命令折行、`↑/↓` 历史翻阅，全局支持 `⌘1~5`、`⌘R`、`⌘L`、`⌘K`
+
+            详细变更请参阅 [CHANGELOG.md](https://github.com/uuu38/modem-box/blob/main/CHANGELOG.md)。
+
+            > **macOS 首次打开提示**：由于开源版本未购买 Apple 开发者公证签名，首次运行若提示“无法验证开发者/已损坏”，请在终端执行：
+            > `xattr -cr /Applications/ModemBox.app`
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
