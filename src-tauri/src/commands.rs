@@ -1,7 +1,8 @@
 use tauri::command;
-use crate::web_client::{WebClient, EnableTelnetResult, AutoDetectResult};
+
+use crate::modem_manager::{Credentials, ModemManager, SurveillanceStatus, SystemInfo};
 use crate::telnet_client::TelnetClient;
-use crate::modem_manager::{ModemManager, SystemInfo, Credentials, SurveillanceStatus};
+use crate::web_client::{AutoDetectResult, EnableTelnetResult, WebClient};
 
 #[command]
 pub async fn auto_detect_telnet(ip: Option<String>) -> Result<AutoDetectResult, String> {
@@ -17,7 +18,9 @@ pub async fn enable_telnet(
     pass: Option<String>,
 ) -> Result<EnableTelnetResult, String> {
     let client = WebClient::new(&ip);
-    client.enable_telnet_direct(user.as_deref(), pass.as_deref()).await
+    client
+        .enable_telnet_direct(user.as_deref(), pass.as_deref())
+        .await
 }
 
 #[command]
@@ -30,35 +33,69 @@ pub async fn test_telnet(ip: String, user: String, pass: String) -> Result<Strin
 #[command]
 pub async fn get_system_info(ip: String, user: String, pass: String) -> Result<SystemInfo, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
-    ModemManager::get_system_info(&mut client).await
+    let web = WebClient::new(&ip);
+    ModemManager::get_system_info(&mut client, &web).await
 }
 
 #[command]
-pub async fn get_credentials(ip: String, user: String, pass: String) -> Result<Credentials, String> {
+pub async fn get_credentials(
+    ip: String,
+    user: String,
+    pass: String,
+) -> Result<Credentials, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
-    ModemManager::get_credentials(&mut client).await
+    let web = WebClient::new(&ip);
+    ModemManager::get_credentials(&mut client, &web).await
 }
 
 #[command]
-pub async fn check_surveillance(ip: String, user: String, pass: String) -> Result<SurveillanceStatus, String> {
+pub async fn check_surveillance(
+    ip: String,
+    user: String,
+    pass: String,
+) -> Result<SurveillanceStatus, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
-    ModemManager::check_surveillance(&mut client).await
+    let web = WebClient::new(&ip);
+    ModemManager::check_surveillance(&mut client, &web).await
 }
 
 #[command]
 pub async fn kill_surveillance(ip: String, user: String, pass: String) -> Result<String, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
-    ModemManager::kill_surveillance(&mut client).await
+    let web = WebClient::new(&ip);
+    ModemManager::kill_surveillance(&mut client, &web).await
 }
 
 #[command]
-pub async fn restore_surveillance(ip: String, user: String, pass: String) -> Result<String, String> {
+pub async fn restore_surveillance(
+    ip: String,
+    user: String,
+    pass: String,
+) -> Result<String, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
-    ModemManager::restore_surveillance(&mut client).await
+    let web = WebClient::new(&ip);
+    ModemManager::restore_surveillance(&mut client, &web).await
 }
 
 #[command]
-pub async fn exec_shell_cmd(ip: String, user: String, pass: String, cmd: String) -> Result<String, String> {
+pub async fn set_ftp_enabled(ip: String, enable: bool) -> Result<String, String> {
+    let web = WebClient::new(&ip);
+    web.set_ftp_enabled(enable).await
+}
+
+#[command]
+pub async fn set_lan_ipv6_enabled(ip: String, enable: bool) -> Result<String, String> {
+    let web = WebClient::new(&ip);
+    web.set_lan_ipv6_enabled(enable).await
+}
+
+#[command]
+pub async fn exec_shell_cmd(
+    ip: String,
+    user: String,
+    pass: String,
+    cmd: String,
+) -> Result<String, String> {
     let mut client = TelnetClient::connect(&ip, 23, &user, &pass).await?;
     client.exec(&cmd).await
 }

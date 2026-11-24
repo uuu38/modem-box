@@ -1,7 +1,7 @@
-pub mod web_client;
-pub mod telnet_client;
-pub mod modem_manager;
 pub mod commands;
+pub mod modem_manager;
+pub mod telnet_client;
+pub mod web_client;
 
 use commands::*;
 
@@ -18,6 +18,8 @@ pub fn run() {
             check_surveillance,
             kill_surveillance,
             restore_surveillance,
+            set_ftp_enabled,
+            set_lan_ipv6_enabled,
             exec_shell_cmd,
         ])
         .run(tauri::generate_context!())

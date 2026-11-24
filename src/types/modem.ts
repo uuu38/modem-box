@@ -1,10 +1,17 @@
 export interface SystemInfo {
+  model_name: string | null;
+  serial_number: string | null;
+  software_version: string | null;
+  soc_chip: string | null;
   cpu_model: string;
   cpu_cores: number;
   cpu_load_1m: number;
-  cpu_load_percent: number;
+  cpu_usage_percent: number;
   temperature: string;
   temperature_c: number | null;
+  optical_temp_c: number | null;
+  rx_power_dbm: number | null;
+  tx_power_dbm: number | null;
   uptime: string;
   ram_total_mb: number;
   ram_used_mb: number;
@@ -19,6 +26,7 @@ export interface Credentials {
   pppoe_username: string | null;
   pppoe_password: string | null;
   gpon_password: string | null;
+  serial_number: string | null;
   base_mac: string | null;
   admin_username: string | null;
   admin_password: string | null;
@@ -27,11 +35,21 @@ export interface Credentials {
 }
 
 export interface SurveillanceStatus {
+  is_root: boolean;
+  uid: string;
   tr069_running: boolean;
   tr069_pid: string | null;
+  tr069_wan_enabled: boolean;
+  tr069_wan_status: string;
   java_running: boolean;
   java_pid: string | null;
   mirror_driver_loaded: boolean;
+  mirror_active: boolean;
+  ftp_running: boolean;
+  ftp_enabled: boolean;
+  ipv6_ra_enabled: boolean;
+  dhcpv6_enabled: boolean;
+  external_connections: string[];
   message: string;
 }
 

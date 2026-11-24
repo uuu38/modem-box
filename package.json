@@ -1,13 +1,39 @@
 {
   "name": "modem-box",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.6.0",
+  "description": "Cross-platform optical modem telemetry, credential vault, and security hardening desktop toolbox built with Tauri 2.0, Rust, and React 19.",
+  "license": "MIT",
+  "author": "uuu38",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uuu38/modem-box.git"
+  },
+  "homepage": "https://github.com/uuu38/modem-box#readme",
+  "bugs": {
+    "url": "https://github.com/uuu38/modem-box/issues"
+  },
+  "keywords": [
+    "tauri",
+    "rust",
+    "react",
+    "optical-modem",
+    "ont",
+    "gpon",
+    "network-tools",
+    "desktop-app"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "check": "bun run build && bun run rust:fmt && bun run rust:clippy && bun run rust:test"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",

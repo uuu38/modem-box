@@ -1,44 +1,71 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  Activity,
+  ChevronRight,
+  Clock,
+  Cpu,
   Gauge,
+  GitBranch,
+  Layers,
   Loader2,
+  Pause,
+  Play,
+  Radio,
   RefreshCw,
-  RotateCcw,
-  ShieldOff,
+  ShieldAlert,
+  ShieldCheck,
   TerminalSquare,
   Wifi,
 } from "lucide-react";
 import { CredentialRow } from "../components/CredentialRow";
 import { RadialGauge } from "../components/RadialGauge";
-import { Badge, Button, Card } from "../components/ui/primitives";
-import type { ConnectionConfig, LogLevel, SystemInfo } from "../types/modem";
+import { Badge, Button, Card, Kbd, cn } from "../components/ui/primitives";
+import type {
+  ConnectionConfig,
+  LogLevel,
+  SurveillanceStatus,
+  SystemInfo,
+} from "../types/modem";
+
+export interface TelemetryHistory {
+  ram: number[];
+  temp: number[];
+  cpu: number[];
+}
 
 interface DashboardPageProps {
   config: ConnectionConfig;
   sysInfo: SystemInfo | null;
+  sysInfoUpdatedAt: string | null;
+  telemetryHistory: TelemetryHistory;
+  surveillance: SurveillanceStatus | null;
   loadingSysInfo: boolean;
+  autoRefresh: boolean;
+  onToggleAutoRefresh: () => void;
   onRefreshSysInfo: () => void;
-  onKillSurveillance: () => Promise<void>;
-  onRestoreSurveillance: () => Promise<void>;
   onLog: (level: LogLevel, msg: string) => void;
   onToast: (type: "success" | "error" | "info", msg: string) => void;
   onJumpSettings: () => void;
+  onJumpSurveillance: () => void;
 }
 
 export function DashboardPage({
   config,
   sysInfo,
+  sysInfoUpdatedAt,
+  telemetryHistory,
+  surveillance,
   loadingSysInfo,
+  autoRefresh,
+  onToggleAutoRefresh,
   onRefreshSysInfo,
-  onKillSurveillance,
-  onRestoreSurveillance,
   onLog,
   onToast,
   onJumpSettings,
+  onJumpSurveillance,
 }: DashboardPageProps) {
   const [testingHandshake, setTestingHandshake] = useState(false);
-  const [survBusy, setSurvBusy] = useState<"kill" | "restore" | null>(null);
 
   const handleTestHandshake = async () => {
     setTestingHandshake(true);
@@ -57,15 +84,6 @@ export function DashboardPage({
       onToast("error", "Telnet 握手失败");
     } finally {
       setTestingHandshake(false);
-    }
-  };
-
-  const runSurvAction = async (mode: "kill" | "restore") => {
-    setSurvBusy(mode);
-    try {
-      await (mode === "kill" ? onKillSurveillance() : onRestoreSurveillance());
-    } finally {
-      setSurvBusy(null);
     }
   };
 
@@ -88,7 +106,7 @@ export function DashboardPage({
       ? "偏高"
       : "充足流畅";
 
-  // Temp gauge tone & text
+  // Temp gauge tone & text (mapped 25°C ~ 90°C for accurate urgency)
   const tempC = sysInfo?.temperature_c ?? null;
   const tempTone =
     tempC === null
@@ -109,110 +127,238 @@ export function DashboardPage({
       ? "略微偏高"
       : "温度正常";
 
-  // CPU load gauge tone & text
-  const cpuPct = sysInfo ? sysInfo.cpu_load_percent : null;
+  // Real-time CPU usage gauge tone & text (/proc/stat delta)
+  const cpuPct = sysInfo ? sysInfo.cpu_usage_percent : null;
   const cpuTone =
     cpuPct === null
       ? "neutral"
       : cpuPct >= 85
       ? "danger"
-      : cpuPct >= 65
+      : cpuPct >= 60
       ? "warning"
       : "teal";
   const cpuStatus =
     cpuPct === null
       ? "待读取"
       : cpuPct >= 85
-      ? "高负载"
-      : cpuPct >= 65
-      ? "中等负载"
-      : "流畅运行";
+      ? "高占用"
+      : cpuPct >= 60
+      ? "中等占用"
+      : "低载流畅";
+
+  // Security summary pill for clean IA handoff to SurveillancePage
+  const riskCount = surveillance
+    ? [
+        surveillance.java_running,
+        surveillance.tr069_wan_enabled,
+        surveillance.mirror_active,
+        surveillance.ipv6_ra_enabled || surveillance.dhcpv6_enabled,
+        surveillance.ftp_enabled || surveillance.ftp_running,
+        surveillance.external_connections.length > 0,
+      ].filter(Boolean).length
+    : null;
+
+  // Optical RX/TX formatting & health color
+  const rx = sysInfo?.rx_power_dbm ?? null;
+  const tx = sysInfo?.tx_power_dbm ?? null;
+  const opticalText =
+    rx !== null && tx !== null
+      ? `${rx.toFixed(1)} / ${tx >= 0 ? "+" : ""}${tx.toFixed(1)} dBm`
+      : rx !== null
+      ? `RX ${rx.toFixed(1)} dBm`
+      : "—";
+  const opticalColor =
+    rx === null
+      ? "text-[#F1F5F9]"
+      : rx < -27 || rx > -8
+      ? "text-[#F87171]"
+      : rx < -25 || rx > -10
+      ? "text-[#FBBF24]"
+      : "text-[#34D399]";
+
+  const deviceTitle = sysInfo
+    ? [sysInfo.model_name, sysInfo.soc_chip].filter(Boolean).join(" · ") ||
+      sysInfo.cpu_model
+    : "—";
+
+  const kernelTitle = sysInfo
+    ? [sysInfo.kernel_version, sysInfo.software_version]
+        .filter(Boolean)
+        .join(" · ")
+    : "—";
+
+  const specItems = [
+    {
+      label: "型号 / 芯片",
+      value: deviceTitle,
+      icon: Cpu,
+      mono: true,
+      colorClass: "text-[#F1F5F9]",
+    },
+    {
+      label: "光功率 (RX / TX)",
+      value: opticalText,
+      icon: Radio,
+      mono: true,
+      colorClass: opticalColor,
+    },
+    {
+      label: "光路状态 (PON)",
+      value: sysInfo?.pon_status ?? "—",
+      icon: Activity,
+      mono: false,
+      colorClass:
+        sysInfo?.pon_status.includes("已注册") ? "text-[#34D399]" : "text-[#F1F5F9]",
+    },
+    {
+      label: "转发模式",
+      value: sysInfo?.wan_mode ?? "—",
+      icon: GitBranch,
+      mono: false,
+      colorClass: "text-[#F1F5F9]",
+    },
+    {
+      label: "内核 / 固件",
+      value: kernelTitle,
+      icon: Layers,
+      mono: true,
+      colorClass: "text-[#F1F5F9]",
+    },
+    {
+      label: "连续运行",
+      value: sysInfo?.uptime ?? "—",
+      icon: Clock,
+      mono: false,
+      colorClass: "text-[#F1F5F9]",
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-[1040px] space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-[20px] font-semibold tracking-tight text-[#F1F5F9]">
-            概览仪表盘
-          </h1>
-          <p className="mt-1 text-[13px] text-[#94A3B8]">
-            一屏总览光猫硬件仪表盘、内存温控指标与 Telnet 管理通道
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[20px] font-semibold tracking-tight text-[#F1F5F9]">
+              概览仪表盘
+            </h1>
+            {sysInfoUpdatedAt && (
+              <Badge tone="neutral" className="font-mono tabular-nums">
+                更新于 {sysInfoUpdatedAt}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 text-[12px] text-[#94A3B8]">
+            实时采样 /proc/stat 真实 CPU、内存、SoC/光模块温控与 GPON 光功率指标
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          disabled={loadingSysInfo || config.state !== "online"}
-          onClick={onRefreshSysInfo}
-        >
-          {loadingSysInfo ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          刷新仪表盘
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={config.state !== "online"}
+            onClick={onToggleAutoRefresh}
+            title={
+              autoRefresh
+                ? "点击暂停每 4 秒自动采样"
+                : "点击开启每 4 秒自动实时采样"
+            }
+            className={cn(
+              "inline-flex h-9 items-center gap-2 rounded-[8px] border px-3 text-[12px] font-medium transition-all cursor-pointer disabled:opacity-45",
+              autoRefresh && config.state === "online"
+                ? "border-[#14B8A6]/35 bg-[#14B8A6]/12 text-[#2DD4BF] hover:bg-[#14B8A6]/18"
+                : "border-white/[0.1] bg-[#1A2332] text-[#94A3B8] hover:text-[#F1F5F9]"
+            )}
+          >
+            {autoRefresh && config.state === "online" ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-[#14B8A6] animate-pulse" />
+                <span>实时 · 4s</span>
+                <Pause className="h-3 w-3 opacity-80" />
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3" />
+                <span>已暂停</span>
+              </>
+            )}
+          </button>
+
+          <Button
+            variant="primary"
+            disabled={loadingSysInfo || config.state !== "online"}
+            onClick={onRefreshSysInfo}
+            title="立即采样刷新 (⌘R)"
+          >
+            {loadingSysInfo ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            刷新
+            <Kbd className="border-black/20 bg-black/15 text-[#042F2E]">⌘R</Kbd>
+          </Button>
+        </div>
       </div>
 
-      {/* Unified Card 1: 硬件健康仪表盘（内存、温度、CPU负载 + 所有硬件规格参数） */}
+      {/* Unified Card 1: 硬件健康仪表盘（纯监控职责 + 安全加固状态入口） */}
       <Card className="relative overflow-hidden p-5">
-        <div className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r-full bg-[#14B8A6]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-[#14B8A6]/60 via-[#14B8A6]/20 to-transparent" />
 
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#14B8A6]/12 text-[#14B8A6]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#14B8A6]/12 text-[#14B8A6]">
               <Gauge className="h-4 w-4" />
             </div>
-            <div>
-              <h2 className="text-[14px] font-semibold text-[#F1F5F9]">
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-semibold text-[#F1F5F9]">
                 硬件健康仪表盘
               </h2>
-              <p className="text-[12px] text-[#94A3B8]">
-                实时采集内存占用、SoC 温度、CPU 负载与底层硬件参数
+              <p className="truncate text-[12px] text-[#94A3B8]">
+                实时记录最近 20 次采样趋势，温度刻度映射 25°C ~ 90°C
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={survBusy !== null || config.state !== "online"}
-              onClick={() => void runSurvAction("restore")}
-            >
-              {survBusy === "restore" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5" />
+          {/* Clean Security Audit Status Handoff Pill */}
+          {riskCount !== null && (
+            <button
+              type="button"
+              onClick={onJumpSurveillance}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-all cursor-pointer hover:brightness-110",
+                riskCount === 0
+                  ? "border-[#10B981]/30 bg-[#10B981]/10 text-[#34D399]"
+                  : "border-[#F59E0B]/35 bg-[#F59E0B]/12 text-[#FBBF24]"
               )}
-              恢复监控
-            </Button>
-
-            <Button
-              variant="danger"
-              size="sm"
-              disabled={survBusy !== null || config.state !== "online"}
-              onClick={() => void runSurvAction("kill")}
             >
-              {survBusy === "kill" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {riskCount === 0 ? (
+                <>
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>安全达标 · 零外联</span>
+                </>
               ) : (
-                <ShieldOff className="h-3.5 w-3.5" />
+                <>
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  <span>{riskCount} 项待加固 · 前往处理</span>
+                </>
               )}
-              一键释放 Java 监控内存
-            </Button>
-          </div>
+              <ChevronRight className="h-3.5 w-3.5 opacity-80" />
+            </button>
+          )}
         </div>
 
-        {/* 3 枚环形表盘 */}
+        {/* 3 枚环形表盘 + 实时趋势折线 */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <RadialGauge
             title="内存占用率 (RAM)"
             valueText={ramPct !== null ? `${ramPct}%` : "--%"}
-            percent={ramPct}
+            value={ramPct}
+            minScale={0}
+            maxScale={100}
             statusText={ramStatus}
             tone={ramTone}
+            history={telemetryHistory.ram}
             subText={
               sysInfo
                 ? `已用 ${sysInfo.ram_used_mb} / ${sysInfo.ram_total_mb} MB`
@@ -223,11 +369,17 @@ export function DashboardPage({
           <RadialGauge
             title="芯片实时温度 (SoC)"
             valueText={sysInfo ? sysInfo.temperature : "--°C"}
-            percent={tempC}
+            value={tempC}
+            minScale={25}
+            maxScale={90}
             statusText={tempStatus}
             tone={tempTone}
+            history={telemetryHistory.temp}
             subText={
-              tempC !== null
+              sysInfo?.optical_temp_c !== null &&
+              sysInfo?.optical_temp_c !== undefined
+                ? `光模块 ${sysInfo.optical_temp_c.toFixed(1)}°C · 告警 80°C`
+                : tempC !== null
                 ? "安全工作阈值 < 80°C"
                 : sysInfo
                 ? "当前固件未开放温度节点"
@@ -236,87 +388,74 @@ export function DashboardPage({
           />
 
           <RadialGauge
-            title="CPU 综合负载"
-            valueText={cpuPct !== null ? `${cpuPct}%` : "--%"}
-            percent={cpuPct}
+            title="CPU 实时占用"
+            valueText={cpuPct !== null ? `${cpuPct.toFixed(1)}%` : "--%"}
+            value={cpuPct}
+            minScale={0}
+            maxScale={100}
             statusText={cpuStatus}
             tone={cpuTone}
+            history={telemetryHistory.cpu}
             subText={
               sysInfo
-                ? `1m Load ${sysInfo.cpu_load_1m.toFixed(2)} · ${sysInfo.cpu_cores} 核心`
+                ? `${sysInfo.cpu_cores} 核心 · 1m Load ${sysInfo.cpu_load_1m.toFixed(2)}`
                 : "等待连接读取"
             }
           />
         </div>
 
-        {/* 整合在卡片底部的完整硬件与链路规格参数 */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <div className="rounded-[8px] border border-white/[0.06] bg-[#1A2332]/75 px-3 py-2.5">
-            <div className="text-[11px] text-[#94A3B8]">处理器架构</div>
-            <div
-              title={sysInfo?.cpu_model ?? ""}
-              className="mt-1 truncate font-mono text-[12.5px] font-medium text-[#F1F5F9]"
-            >
-              {sysInfo ? `${sysInfo.cpu_model}` : "—"}
-            </div>
-          </div>
-
-          <div className="rounded-[8px] border border-white/[0.06] bg-[#1A2332]/75 px-3 py-2.5">
-            <div className="text-[11px] text-[#94A3B8]">Linux 内核</div>
-            <div
-              title={sysInfo?.kernel_version ?? ""}
-              className="mt-1 truncate font-mono text-[12.5px] font-medium text-[#F1F5F9]"
-            >
-              {sysInfo?.kernel_version ?? "—"}
-            </div>
-          </div>
-
-          <div className="rounded-[8px] border border-white/[0.06] bg-[#1A2332]/75 px-3 py-2.5">
-            <div className="text-[11px] text-[#94A3B8]">光路状态 (PON)</div>
-            <div className="mt-1 truncate text-[12.5px] font-medium text-[#F1F5F9]">
-              {sysInfo?.pon_status ?? "—"}
-            </div>
-          </div>
-
-          <div className="rounded-[8px] border border-white/[0.06] bg-[#1A2332]/75 px-3 py-2.5">
-            <div className="text-[11px] text-[#94A3B8]">转发模式</div>
-            <div className="mt-1 truncate text-[12.5px] font-medium text-[#F1F5F9]">
-              {sysInfo?.wan_mode ?? "—"}
-            </div>
-          </div>
-
-          <div className="col-span-2 rounded-[8px] border border-white/[0.06] bg-[#1A2332]/75 px-3 py-2.5 sm:col-span-1">
-            <div className="text-[11px] text-[#94A3B8]">连续运行</div>
-            <div className="mt-1 truncate text-[12.5px] font-medium text-[#F1F5F9]">
-              {sysInfo?.uptime ?? "—"}
-            </div>
-          </div>
+        {/* 3×2 硬件与光路规格网格（在 1080px 窗口下每格 ~245px，零截断 + 可选中复制） */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {specItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={item.label}
+                className="rounded-[8px] border border-white/[0.06] bg-[#1A2332]/75 px-3.5 py-2.5 transition-colors hover:border-white/[0.11]"
+              >
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#7E91AA]">
+                  <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                  <span>{item.label}</span>
+                </div>
+                <div
+                  title={item.value}
+                  className={cn(
+                    "mt-1 truncate select-text text-[13px] font-medium tabular-nums",
+                    item.mono && "font-mono",
+                    item.colorClass
+                  )}
+                >
+                  {item.value}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Card>
 
       {/* Card 2: Telnet 管理通道 */}
       <Card className="p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#10B981]/12 text-[#10B981]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#10B981]/12 text-[#10B981]">
               <TerminalSquare className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-[14px] font-semibold text-[#F1F5F9]">
+                <h2 className="text-[15px] font-semibold text-[#F1F5F9]">
                   Telnet 管理通道
                 </h2>
                 <Badge tone={config.state === "online" ? "success" : "danger"}>
                   {config.state === "online" ? "23 端口在线" : "23 端口离线"}
                 </Badge>
               </div>
-              <p className="text-[12px] text-[#94A3B8]">
-                自动从光猫免密同步，支持本地终端登录与后续凭据提取
+              <p className="truncate text-[12px] text-[#94A3B8]">
+                自动从光猫免密同步，支持终端排障与底层硬件采集
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -336,18 +475,21 @@ export function DashboardPage({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <CredentialRow
+            compact
             label="网关 IP"
             value={config.ip}
             onCopied={(l) => onToast("info", `已复制${l}`)}
           />
           <CredentialRow
+            compact
             label="Telnet 账号"
             value={config.user}
             onCopied={(l) => onToast("info", `已复制${l}`)}
           />
           <CredentialRow
+            compact
             label="Telnet 密码"
             value={config.pass}
             isSecret
