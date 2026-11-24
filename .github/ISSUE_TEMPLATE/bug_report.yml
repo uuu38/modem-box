@@ -1,0 +1,40 @@
+name: Bug 反馈
+description: 反馈 ModemBox 的功能异常、解析错误或界面问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先确保日志与截图中**已打码隐藏真实宽带账号、密码、GPON 密码、SN 码与公网 IP**。
+
+  - type: input
+    id: version
+    attributes:
+      label: ModemBox 版本与系统环境
+      placeholder: "例如：v0.6.0 / macOS 15.2 (Apple Silicon)"
+    validations:
+      required: true
+
+  - type: input
+    id: modem
+    attributes:
+      label: 光猫品牌与型号
+      placeholder: "例如：四川天邑 TEWA-7100A（河南移动）"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述与复现步骤
+      placeholder: "请描述触发操作、预期结果与实际现象..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏后的底部运行日志 / 终端输出
+      render: text
+      placeholder: "可点击应用底部日志栏「复制」按钮粘贴（请务必先删除个人密码）"

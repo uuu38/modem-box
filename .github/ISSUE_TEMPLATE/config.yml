@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞私密反馈
+    url: https://github.com/uuu38/modem-box/security/advisories/new
+    about: 如发现安全隐患请勿公开披露，请通过 GitHub Security Advisory 私密提交

@@ -1,0 +1,35 @@
+name: 新机型适配申请
+description: 提交新的光猫型号适配建议或兼容测试报告
+title: "[Device]: "
+labels: ["enhancement", "device-support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提供脱敏后的基础系统与接口特征有助于快速完成适配，请**切勿上传真实账号密码或完整配置文件**。
+
+  - type: input
+    id: model
+    attributes:
+      label: 光猫品牌、型号与运营商地区
+      placeholder: "例如：烽火 HG6145F1 / 江苏电信"
+    validations:
+      required: true
+
+  - type: textarea
+    id: system
+    attributes:
+      label: 系统与硬件特征（可选）
+      placeholder: "例如：uname -a、cat /proc/cpuinfo、是否支持 /getObjs 与 Telnet 等"
+
+  - type: textarea
+    id: results
+    attributes:
+      label: 当前各模块可用情况
+      placeholder: |
+        - 自动探测开启 Telnet：
+        - 仪表盘遥测（CPU / RAM / 温度 / 光功率）：
+        - 核心凭据读取：
+        - 安全审计与加固：
+    validations:
+      required: true
